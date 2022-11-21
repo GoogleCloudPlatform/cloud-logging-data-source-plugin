@@ -1,0 +1,42 @@
+{
+  "$schema": "https://raw.githubusercontent.com/grafana/grafana/master/docs/sources/developers/plugins/plugin.schema.json",
+  "type": "datasource",
+  "name": "Google Cloud Logging",
+  "category": "logging",
+  "id": "googlecloud-logging-datasource",
+  "metrics": true,
+  "backend": true,
+  "logs": true,
+  "executable": "gpx_gcp-logging",
+  "info": {
+    "description": "",
+    "author": {
+      "name": "false",
+      "url": ""
+    },
+    "keywords": [
+      "gcp"
+    ],
+    "logos": {
+      "small": "img/logo.svg",
+      "large": "img/logo.svg"
+    },
+    "links": [
+      {
+        "name": "Website",
+        "url": "https://github.com/observiq/cloud-logging-grafana-ds"
+      },
+      {
+        "name": "License",
+        "url": "https://github.com/observiq/cloud-logging-grafana-ds/blob/master/LICENSE"
+      }
+    ],
+    "screenshots": [],
+    "version": "0.0.0",
+    "updated": "%TODAY%"
+  },
+  "dependencies": {
+    "grafanaDependency": ">=7.0.0",
+    "plugins": []
+  }
+}
