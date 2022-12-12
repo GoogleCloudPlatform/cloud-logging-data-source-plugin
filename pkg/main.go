@@ -19,7 +19,7 @@ import (
 
 	"github.com/grafana/grafana-plugin-sdk-go/backend/datasource"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
-	"github.com/observiq/cloud-logging-grafana-ds/pkg/plugin"
+	"github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin/pkg/plugin"
 )
 
 func main() {

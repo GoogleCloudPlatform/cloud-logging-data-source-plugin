@@ -27,7 +27,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/observiq/cloud-logging-grafana-ds/pkg/plugin/cloudlogging"
+	"github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin/pkg/plugin/cloudlogging"
 )
 
 // Make sure CloudLoggingDatasource implements required interfaces

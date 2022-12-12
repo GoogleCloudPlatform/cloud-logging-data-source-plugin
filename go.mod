@@ -1,4 +1,4 @@
-module github.com/observiq/cloud-logging-grafana-ds
+module github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin
 
 go 1.16
 

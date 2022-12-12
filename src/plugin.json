@@ -24,11 +24,11 @@
     "links": [
       {
         "name": "Website",
-        "url": "https://github.com/observiq/cloud-logging-grafana-ds"
+        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin"
       },
       {
         "name": "License",
-        "url": "https://github.com/observiq/cloud-logging-grafana-ds/blob/master/LICENSE"
+        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin/blob/master/LICENSE"
       }
     ],
     "screenshots": [],
