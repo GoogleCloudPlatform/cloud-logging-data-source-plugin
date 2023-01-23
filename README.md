@@ -11,53 +11,20 @@ which allows users to query and visualize their Google Cloud logs in Grafana.
 
 Download this plugin to the machine Grafana is running on, either using `git clone` or simply downloading it as a ZIP file. For the purpose of this guide, we'll assume the user "alice" has downloaded it into their local directory "/Users/alice/grafana/". If you are running the Grafana server using a user such as `grafana`, make sure the user has access to the directory.
 
-### Build the plugin
+### Generate a JWT file
 
-If you download the source, you need to build the plugin. Make sure you have all the prerequisites installed and configured:
+1.  if you don't have gcp project, add new gcp project. [link](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
+2.  Open the [Credentials](https://console.developers.google.com/apis/credentials) page in the Google API Console.
+3.  Click **Create Credentials** then click **Service account**.
+4.  On the Create service account page, enter the Service account details.
+5.  On the `Create service account` page, fill in the `Service account details` and then click `Create`
+6.  On the `Service account permissions` page, don't add a role to the service account. Just click `Continue`
+7.  In the next step, click `Create Key`. Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
+8.  Note your `service account email` ex) *@*.iam.gserviceaccount.com
+9.  Open the [Google Analytics API](https://console.cloud.google.com/apis/library/analytics.googleapis.com)  in API Library and enable access for your account
+10. Open the [Google Analytics Reporting API](https://console.cloud.google.com/marketplace/product/google/analyticsreporting.googleapis.com?q=search&referrer=search&project=composed-apogee-307906)  in API Library and enable access for your GA Data
 
-- Grafana 9.0
-- Go 1.16+
-- Mage
-- NodeJS
-- yarn
-
-Under the source directory, run the following commands:
-
-```bash
-yarn install
-yarn build
-
-#Run the following to update Grafana plugin SDK for Go dependency to the latest minor version:
-
-go get -u github.com/grafana/grafana-plugin-sdk-go
-go mod tidy
-
-#Build backend plugin binaries for Linux, Windows and Darwin to dist directory:
-mage -v
-```
-
-More details, please read [the doc](https://grafana.com/tutorials/build-a-data-source-backend-plugin/).
 ### Grafana Configuration
-
-To have Grafana detect this plugin and make it available for use, two entries must be modified in the Grafana config file. See [Grafana's Documentation](https://grafana.com/docs/grafana/v9.0/setup-grafana/configure-grafana/) for more details, including the default location of the config file depending on platform.
-
-First, set `paths.plugins` to point to where this repo has been downloaded locally. The final build artifacts will be under the `dist` directory:
-
-```ini
-[paths]
-plugins = /Users/alice/grafana/googlecloud-logging-datasource/dist
-```
-
-Next, update `plugins.allow_loading_unsigned_plugins` so that this plugin's ID is in the list:
-
-```ini
-[plugins]
-allow_loading_unsigned_plugins = googlecloud-logging-datasource
-```
-
-With these settings updated, we can now restart Grafana and expect the plugin to be available. The specific command to restart Grafana will depend on what platform it's running on, with the various options documented by [Grafana](https://grafana.com/docs/grafana/v9.0/setup-grafana/restart-grafana/).
-
-## Configuration
 
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"

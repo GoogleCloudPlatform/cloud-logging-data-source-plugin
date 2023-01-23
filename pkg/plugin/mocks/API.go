@@ -19,7 +19,7 @@ package mocks
 import (
 	context "context"
 
-	cloudlogging "github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin/pkg/plugin/cloudlogging"
+	cloudlogging "github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/cloudlogging"
 
 	logging "google.golang.org/genproto/googleapis/logging/v2"
 

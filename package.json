@@ -13,10 +13,10 @@
   "author": "Google Inc.",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@grafana/data": "latest",
-    "@grafana/runtime": "latest",
-    "@grafana/toolkit": "latest",
-    "@grafana/ui": "latest",
+    "@grafana/data": "^9.0.2",
+    "@grafana/runtime": "^9.0.2",
+    "@grafana/toolkit": "^9.0.2",
+    "@grafana/ui": "^9.0.2",
     "@types/lodash": "latest"
   },
   "resolutions": {
@@ -26,6 +26,10 @@
     "node": ">=14"
   },
   "dependencies": {
-    "@grafana/google-sdk": "^0.0.3"
+    "@grafana/google-sdk": "^0.0.3",
+    "@grafana/data": "^9.0.2",
+    "@grafana/runtime": "^9.0.2",
+    "@grafana/toolkit": "^9.0.2",
+    "@grafana/ui": "^9.0.2"
   }
 }

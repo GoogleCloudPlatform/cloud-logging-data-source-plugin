@@ -113,7 +113,7 @@ func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
 func (c *Client) TestConnection(ctx context.Context, projectID string) error {
 	start := time.Now()
 	defer func() {
-		log.DefaultLogger.Info("Finished testConnection", "duration", time.Since(start).String())
+		log.DefaultLogger.Debug("Finished testConnection", "duration", time.Since(start).String())
 	}()
 
 	it := c.lClient.ListLogEntries(ctx, &loggingpb.ListLogEntriesRequest{
@@ -149,7 +149,7 @@ func (c *Client) ListLogs(ctx context.Context, q *Query) ([]*loggingpb.LogEntry,
 
 	start := time.Now()
 	defer func() {
-		log.DefaultLogger.Info("Finished listing logs", "duration", time.Since(start).String())
+		log.DefaultLogger.Debug("Finished listing logs", "duration", time.Since(start).String())
 	}()
 
 	it := c.lClient.ListLogEntries(ctx, &req)

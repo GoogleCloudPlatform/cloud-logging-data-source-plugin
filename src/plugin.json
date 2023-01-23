@@ -11,11 +11,11 @@
   "info": {
     "description": "",
     "author": {
-      "name": "false",
-      "url": ""
+      "name": "GCP logging team",
+      "url": "https://cloud.google.com/logging"
     },
     "keywords": [
-      "gcp"
+      "gcp", "cloud logging"
     ],
     "logos": {
       "small": "img/logo.svg",
@@ -24,11 +24,11 @@
     "links": [
       {
         "name": "Website",
-        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin"
+        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin"
       },
       {
         "name": "License",
-        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin/blob/master/LICENSE"
+        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/master/LICENSE"
       }
     ],
     "screenshots": [],
