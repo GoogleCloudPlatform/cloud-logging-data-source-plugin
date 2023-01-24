@@ -32,7 +32,7 @@
       }
     ],
     "screenshots": [],
-    "version": "1.0.0",
+    "version": "%VERSION%",
     "updated": "%TODAY%"
   },
   "dependencies": {
