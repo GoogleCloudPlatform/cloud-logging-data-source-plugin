@@ -26,11 +26,10 @@ You can following the those steps to enable it:
 2.  Open the [Credentials](https://console.developers.google.com/apis/credentials) page in the Google API Console.
 3.  Click **Create Credentials** then click **Service account**.
 4.  On the Create service account page, enter the Service account details.
-5.  On the `Create service account` page, fill in the `Service account details` and then click `Create`
-6.  On the `Service account permissions` page, don't add a role to the service account. Just click `Continue`
-7.  In the next step, click `Create Key`. Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
-8.  Note your `service account email` ex) *@*.iam.gserviceaccount.com
-9.  Grant the service account `logging viewer` role.
+5.  On the `Create service account` page, fill in the `Service account details` and then click `Create and Continue`
+6.  On the `Grant this service account access to project` section, select the `Logs Viewer` role under `Logging` to the service account. Click `Done`
+7.  In the next step, click the service account you just created. Under the `Keys` tabl and select `Add key` and `Create new key`
+8.  Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
 
 ### Grafana Configuration
 
