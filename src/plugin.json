@@ -24,11 +24,11 @@
     "links": [
       {
         "name": "Website",
-        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin"
+        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin"
       },
       {
         "name": "License",
-        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin/blob/master/LICENSE"
+        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/master/LICENSE"
       }
     ],
     "screenshots": [],
