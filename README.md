@@ -11,9 +11,18 @@ which allows users to query and visualize their Google Cloud logs in Grafana.
 
 Download this plugin to the machine Grafana is running on, either using `git clone` or simply downloading it as a ZIP file. For the purpose of this guide, we'll assume the user "alice" has downloaded it into their local directory "/Users/alice/grafana/". If you are running the Grafana server using a user such as `grafana`, make sure the user has access to the directory.
 
+### Enable Cloud Resource Manager API
+
+You need to enable the resource manager API. Otherwise, your cloud projects will not be displayed in the dropdown menu.
+
+You can following the those steps to enable it:
+
+1. Navigate to the [cloud resource manager API page](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com]) in GCP and select your project
+2. Press the `Enable` button
+
 ### Generate a JWT file
 
-1.  if you don't have gcp project, add new gcp project. [link](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
+1.  If you don't have gcp project, add new gcp project. [link](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
 2.  Open the [Credentials](https://console.developers.google.com/apis/credentials) page in the Google API Console.
 3.  Click **Create Credentials** then click **Service account**.
 4.  On the Create service account page, enter the Service account details.
@@ -21,8 +30,7 @@ Download this plugin to the machine Grafana is running on, either using `git clo
 6.  On the `Service account permissions` page, don't add a role to the service account. Just click `Continue`
 7.  In the next step, click `Create Key`. Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
 8.  Note your `service account email` ex) *@*.iam.gserviceaccount.com
-9.  Open the [Google Analytics API](https://console.cloud.google.com/apis/library/analytics.googleapis.com)  in API Library and enable access for your account
-10. Open the [Google Analytics Reporting API](https://console.cloud.google.com/marketplace/product/google/analyticsreporting.googleapis.com?q=search&referrer=search&project=composed-apogee-307906)  in API Library and enable access for your GA Data
+9.  Grant the service account `logging viewer` role.
 
 ### Grafana Configuration
 
