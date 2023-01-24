@@ -23,11 +23,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/cloudlogging"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
-	"github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin/pkg/plugin/cloudlogging"
 )
 
 // Make sure CloudLoggingDatasource implements required interfaces
@@ -123,7 +123,7 @@ type ListProjectsResponse struct {
 //
 // Currently only projects are fetched, other requests receive a 404
 func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
-	log.DefaultLogger.Info("CallResource called")
+	// log.DefaultLogger.Info("CallResource called")
 
 	// Right now we only support calls to `/projects`
 	resource := req.Path
@@ -163,7 +163,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
 // contains Frames ([]*Frame).
 func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	log.DefaultLogger.Info("QueryData called")
+	// log.DefaultLogger.Info("QueryData called")
 
 	// create response struct
 	response := backend.NewQueryDataResponse()
@@ -249,7 +249,7 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 // datasource configuration page which allows users to verify that
 // a datasource is working as expected.
 func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	log.DefaultLogger.Info("CheckHealth called")
+	// log.DefaultLogger.Info("CheckHealth called")
 
 	var status = backend.HealthStatusOk
 	settings := req.PluginContext.DataSourceInstanceSettings

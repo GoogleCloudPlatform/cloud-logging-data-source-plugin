@@ -1,4 +1,4 @@
-module github.com/GoogleCloudPlatform/cloud-logging-grafana-data-source-plugin
+module github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin
 
 go 1.16
 

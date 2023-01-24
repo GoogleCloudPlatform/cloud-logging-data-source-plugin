@@ -11,11 +11,11 @@
   "info": {
     "description": "",
     "author": {
-      "name": "false",
-      "url": ""
+      "name": "GCP logging team",
+      "url": "https://cloud.google.com/logging"
     },
     "keywords": [
-      "gcp"
+      "gcp", "cloud logging"
     ],
     "logos": {
       "small": "img/logo.svg",
@@ -36,7 +36,7 @@
     "updated": "%TODAY%"
   },
   "dependencies": {
-    "grafanaDependency": ">=7.0.0",
+    "grafanaDependency": ">=8.0.0",
     "plugins": []
   }
 }
