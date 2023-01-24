@@ -18,6 +18,13 @@ import { DataQuery } from '@grafana/data';
 import { DataSourceOptions } from '@grafana/google-sdk';
 
 /**
+ * DataSourceOptionsExt adds endpoint to DataSourceOptions
+ */
+export interface DataSourceOptionsExt extends DataSourceOptions {
+  endpoint?: string;
+}
+
+/**
  * Query from Grafana
  */
 export interface Query extends DataQuery {
@@ -35,4 +42,4 @@ export const defaultQuery: Partial<Query> = {
 /**
  * These are options configured for each DataSource instance.
  */
-export type CloudLoggingOptions = DataSourceOptions;
+export type CloudLoggingOptions = DataSourceOptionsExt;

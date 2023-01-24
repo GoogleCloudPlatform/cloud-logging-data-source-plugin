@@ -31,7 +31,9 @@
         "url": "https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/master/LICENSE"
       }
     ],
-    "screenshots": [],
+    "screenshots": [
+      {"name": "google_cloud_logging_panel_1", "path": "img/google_cloud_logging_panel_1.png"}
+    ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
   },

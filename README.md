@@ -37,7 +37,8 @@ You can following the those steps to enable it:
 2. Click "Add data source"
 3. Select "Google Cloud Logging"
 4. Provide credentials in a JWT file, either by using the file selector or pasting the contents of the file.
-5. Click "Save & test" to test that logs can be queried from Cloud Logging.
+5. If desired, provide a regional [Cloud Logging service endpoint](https://cloud.google.com/vpc/docs/regional-service-endpoints#cloud-logging) in order to only collect logs from a specific log bucket region
+6. Click "Save & test" to test that logs can be queried from Cloud Logging.
 
 ## Licenses
 
