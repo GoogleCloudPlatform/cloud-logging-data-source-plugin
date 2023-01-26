@@ -40,6 +40,7 @@ describe('Google Cloud Logging Data Source', () => {
                     defaultProject: projectId,
                 },
                 name: 'something',
+                readOnly: true,
             });
             expect(ds.getDefaultProject()).toBe(projectId);
         });
@@ -81,5 +82,6 @@ const makeDataSource = () => {
             authenticationType: GoogleAuthType.JWT,
         },
         name: 'something',
+        readOnly: true,
     });
 }
