@@ -15,21 +15,23 @@ Download this plugin to the machine Grafana is running on, either using `git clo
 
 You need to enable the resource manager API. Otherwise, your cloud projects will not be displayed in the dropdown menu.
 
-You can following the those steps to enable it:
+You can follow the steps to enable it:
 
 1. Navigate to the [cloud resource manager API page](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com]) in GCP and select your project
 2. Press the `Enable` button
 
-### Generate a JWT file
+### Generate a JWT file & Assign IAM Permissions
 
-1.  If you don't have gcp project, add new gcp project. [link](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
-2.  Open the [Credentials](https://console.developers.google.com/apis/credentials) page in the Google API Console.
-3.  Click **Create Credentials** then click **Service account**.
-4.  On the Create service account page, enter the Service account details.
-5.  On the `Create service account` page, fill in the `Service account details` and then click `Create and Continue`
-6.  On the `Grant this service account access to project` section, select the `Logs Viewer` role under `Logging` to the service account. Click `Done`
-7.  In the next step, click the service account you just created. Under the `Keys` tabl and select `Add key` and `Create new key`
-8.  Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
+1. If you don't have gcp project, add a new gcp project. [link](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
+2. Open the [Credentials](https://console.developers.google.com/apis/credentials) page in the Google API Console
+3. Click **Create Credentials** then click **Service account**
+4. On the Create service account page, enter the Service account details
+5. On the `Create service account` page, fill in the `Service account details` and then click `Create and Continue`
+6. On the `Grant this service account access to project` section, select the `Logs Viewer` role under `Logging` to the service account. Click `Done`
+7. In the next step, click the service account you just created. Under the `Keys` tab and select `Add key` and `Create new key`
+8. Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
+
+If you want to access logs in multiple cloud projects, you need to ensure the service account has permission to read logs from all of them.
 
 ### Grafana Configuration
 ![image info](./src/img/cloud_logging_config.png)
