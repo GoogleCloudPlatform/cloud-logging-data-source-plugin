@@ -16,12 +16,11 @@
 
 import React, { KeyboardEvent, useEffect, useMemo, useState } from 'react';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
-import { DataSourceOptions } from '@grafana/google-sdk';
 import { InlineField, InlineFieldRow, LinkButton, Select, TextArea, Tooltip } from '@grafana/ui';
 import { DataSource } from './datasource';
-import { defaultQuery, Query } from './types';
+import { CloudLoggingOptions, defaultQuery, Query } from './types';
 
-type Props = QueryEditorProps<DataSource, Query, DataSourceOptions>;
+type Props = QueryEditorProps<DataSource, Query, CloudLoggingOptions>;
 
 /**
  * This is basically copied from {MQLQueryEditor} from the cloud-monitoring data source

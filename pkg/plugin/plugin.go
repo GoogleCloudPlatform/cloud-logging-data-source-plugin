@@ -42,17 +42,17 @@ const (
 	privateKeyKey = "privateKey"
 )
 
-// jwtToken is the fields parsed from a JWT token and sent from the front end
-type jwtToken struct {
+// config is the fields parsed from the front end
+type config struct {
 	AuthType       string `json:"authenticationType"`
 	ClientEmail    string `json:"clientEmail"`
 	DefaultProject string `json:"defaultProject"`
 	TokenURI       string `json:"tokenUri"`
+	Endpoint       string `json:"endpoint"`
 }
 
-// toServiceAccountJSON creates the serviceAccountJSON bytes from the JWT token fields
-// in gcpCreds
-func (c jwtToken) toServiceAccountJSON(privateKey string) ([]byte, error) {
+// toServiceAccountJSON creates the serviceAccountJSON bytes from the config fields
+func (c config) toServiceAccountJSON(privateKey string) ([]byte, error) {
 	return json.Marshal(serviceAccountJSON{
 		Type:        "service_account",
 		ProjectID:   c.DefaultProject,
@@ -74,8 +74,8 @@ type serviceAccountJSON struct {
 
 // NewCloudLoggingDatasource creates a new datasource instance.
 func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
-	var creds jwtToken
-	if err := json.Unmarshal(settings.JSONData, &creds); err != nil {
+	var conf config
+	if err := json.Unmarshal(settings.JSONData, &conf); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
 
@@ -84,12 +84,12 @@ func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (ins
 		return nil, errMissingCredentials
 	}
 
-	serviceAccount, err := creds.toServiceAccountJSON(privateKey)
+	serviceAccount, err := conf.toServiceAccountJSON(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("create credentials: %w", err)
 	}
 
-	client, err := cloudlogging.NewClient(context.TODO(), serviceAccount)
+	client, err := cloudlogging.NewClient(context.TODO(), serviceAccount, conf.Endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -136,11 +136,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 
 	projects, err := d.client.ListProjects(ctx)
 	if err != nil {
-		log.DefaultLogger.Error("error listing", "error", err)
-		return sender.Send(&backend.CallResourceResponse{
-			Status: http.StatusInternalServerError,
-			Body:   []byte(`Unable to list projects`),
-		})
+		log.DefaultLogger.Warn("problem listing projects", "error", err)
 	}
 
 	body, err := json.Marshal(&ListProjectsResponse{Projects: projects})
@@ -182,9 +178,9 @@ func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.Que
 
 // queryModel is the fields needed to query from Grafana
 type queryModel struct {
-	QueryText     string `json:"queryText"`
-	ProjectID     string `json:"projectId"`
-	MaxDataPoints int    `json:"MaxDataPoints"`
+	QueryText string `json:"queryText"`
+	ProjectID string `json:"projectId"`
+	Hide      bool   `json:"hide"`
 }
 
 func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -193,6 +189,11 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 	var q queryModel
 	response.Error = json.Unmarshal(query.JSON, &q)
 	if response.Error != nil {
+		return response
+	}
+
+	// Don't query if query should be hidden
+	if q.Hide {
 		return response
 	}
 
@@ -254,8 +255,8 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 	var status = backend.HealthStatusOk
 	settings := req.PluginContext.DataSourceInstanceSettings
 
-	var creds jwtToken
-	if err := json.Unmarshal(settings.JSONData, &creds); err != nil {
+	var conf config
+	if err := json.Unmarshal(settings.JSONData, &conf); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
 
@@ -264,12 +265,12 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 		return nil, errMissingCredentials
 	}
 
-	serviceAccount, err := creds.toServiceAccountJSON(privateKey)
+	serviceAccount, err := conf.toServiceAccountJSON(privateKey)
 	if err != nil {
 		return nil, fmt.Errorf("create credentials: %w", err)
 	}
 
-	client, err := cloudlogging.NewClient(ctx, serviceAccount)
+	client, err := cloudlogging.NewClient(ctx, serviceAccount, conf.Endpoint)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +281,7 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 		}
 	}()
 
-	if err := client.TestConnection(ctx, creds.DefaultProject); err != nil {
+	if err := client.TestConnection(ctx, conf.DefaultProject); err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: fmt.Sprintf("failed to run test query: %s", err),
@@ -289,6 +290,6 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 
 	return &backend.CheckHealthResult{
 		Status:  status,
-		Message: fmt.Sprintf("Successfully queried logs from GCP project %s", creds.DefaultProject),
+		Message: fmt.Sprintf("Successfully queried logs from GCP project %s", conf.DefaultProject),
 	}, nil
 }

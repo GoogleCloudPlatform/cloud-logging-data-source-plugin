@@ -30,6 +30,8 @@ import (
 	loggingpb "google.golang.org/genproto/googleapis/logging/v2"
 )
 
+const testConnectionTimeout = time.Minute * 1
+
 // API implements the methods we need to query logs and list projects from GCP
 type API interface {
 	// ListLogs retrieves all logs matching some query filter up to the given limit
@@ -50,9 +52,9 @@ type Client struct {
 }
 
 // NewClient creates a new Client using jsonCreds for authentication
-func NewClient(ctx context.Context, jsonCreds []byte) (*Client, error) {
+func NewClient(ctx context.Context, jsonCreds []byte, endpoint string) (*Client, error) {
 	client, err := logging.NewClient(ctx, option.WithCredentialsJSON(jsonCreds),
-		option.WithUserAgent("googlecloud-logging-datasource"))
+		option.WithUserAgent("googlecloud-logging-datasource"), option.WithEndpoint(endpoint))
 	if err != nil {
 		return nil, err
 	}
@@ -112,18 +114,29 @@ func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
 // TestConnection queries for any log from the given project
 func (c *Client) TestConnection(ctx context.Context, projectID string) error {
 	start := time.Now()
+
+	listCtx, cancel := context.WithTimeout(ctx, time.Duration(testConnectionTimeout))
+
 	defer func() {
+		cancel()
 		log.DefaultLogger.Debug("Finished testConnection", "duration", time.Since(start).String())
 	}()
 
-	it := c.lClient.ListLogEntries(ctx, &loggingpb.ListLogEntriesRequest{
+	it := c.lClient.ListLogEntries(listCtx, &loggingpb.ListLogEntriesRequest{
 		ResourceNames: []string{projectResourceName(projectID)},
 		PageSize:      1,
 	})
 
+	if listCtx.Err() != nil {
+		return errors.New("list entries: timeout")
+	}
+
 	entry, err := it.Next()
 	if err == iterator.Done {
 		return errors.New("no entries")
+	}
+	if err == context.DeadlineExceeded {
+		return errors.New("list entries: timeout")
 	}
 	if err != nil {
 		return fmt.Errorf("list entries: %w", err)

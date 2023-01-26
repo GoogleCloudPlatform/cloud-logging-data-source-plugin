@@ -16,12 +16,13 @@
 
 import React from 'react';
 import { DataSourcePluginOptionsEditorProps, onUpdateDatasourceJsonDataOption } from '@grafana/data';
-import { DataSourceOptions, DataSourceSecureJsonData, GoogleAuthType } from '@grafana/google-sdk';
-import { FieldSet } from '@grafana/ui';
+import { DataSourceSecureJsonData, GoogleAuthType } from '@grafana/google-sdk';
+import { Field, FieldSet, Input } from '@grafana/ui';
 import { JWTConfigEditor } from './components/JWTConfigEditor';
 import { JWTForm } from './components/JWTForm';
+import { CloudLoggingOptions } from 'types';
 
-type Props = DataSourcePluginOptionsEditorProps<DataSourceOptions, DataSourceSecureJsonData>;
+type Props = DataSourcePluginOptionsEditorProps<CloudLoggingOptions, DataSourceSecureJsonData>;
 
 /**
  * Config page that accepts a JWT token either through upload or pasting
@@ -47,7 +48,7 @@ export const ConfigEditor: React.FC<Props> = (props: Props) => {
    *
    * @param jsonData Remaining data source options
    */
-  const onResetJWTToken = (jsonData?: Partial<DataSourceOptions> | null) => {
+  const onResetJWTToken = (jsonData?: Partial<CloudLoggingOptions> | null) => {
     const nextSecureJsonData = { ...secureJsonData };
     const nextJsonData = !jsonData ? { ...options.jsonData } : { ...options.jsonData, ...jsonData };
 
@@ -63,7 +64,7 @@ export const ConfigEditor: React.FC<Props> = (props: Props) => {
     });
   };
 
-  const onJWTFormChange = (key: keyof DataSourceOptions) => onUpdateDatasourceJsonDataOption(props, key);
+  const onJWTFormChange = (key: keyof CloudLoggingOptions) => onUpdateDatasourceJsonDataOption(props, key);
 
   return (
     <>
@@ -91,6 +92,13 @@ export const ConfigEditor: React.FC<Props> = (props: Props) => {
           />
         )}{' '}
       </FieldSet>
+      <Field label="Cloud Logging Service Endpoint" description="Optional">
+        <Input
+          id="endpoint" 
+          value={options.jsonData.endpoint || ''}
+          onChange={onJWTFormChange('endpoint')}
+        />
+      </Field>
     </>
   );
 };
