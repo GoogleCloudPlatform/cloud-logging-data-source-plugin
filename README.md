@@ -35,13 +35,14 @@ You can follow the steps to enable it:
 If you want to access logs in multiple cloud projects, you need to ensure the service account has permission to read logs from all of them.
 
 ### Grafana Configuration
-![image info](./src/img/cloud_logging_config.png)
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"
 3. Select "Google Cloud Logging"
 4. Provide credentials in a JWT file, either by using the file selector or pasting the contents of the file.
 5. If desired, provide a regional [Cloud Logging service endpoint](https://cloud.google.com/vpc/docs/regional-service-endpoints#cloud-logging) in order to only collect logs from a specific log bucket region
 6. Click "Save & test" to test that logs can be queried from Cloud Logging.
+
+![image info](./src/img/cloud_logging_config.png)
 
 ## Licenses
 
