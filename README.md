@@ -1,9 +1,10 @@
 # Google Cloud Logging Data Source
 
 ## Overview
-![image info](./src/img/cloud_logging_explore_view.png)
 The Google Cloud Logging Data Source is a backend data source plugin for Grafana,
 which allows users to query and visualize their Google Cloud logs in Grafana.
+
+![image info](./src/img/cloud_logging_explore_view.png)
 
 ## Setup
 
