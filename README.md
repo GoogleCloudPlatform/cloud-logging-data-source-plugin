@@ -1,7 +1,7 @@
 # Google Cloud Logging Data Source
 
 ## Overview
-
+![image info](./src/img/cloud_logging_explore_view.png)
 The Google Cloud Logging Data Source is a backend data source plugin for Grafana,
 which allows users to query and visualize their Google Cloud logs in Grafana.
 
@@ -32,7 +32,7 @@ You can following the those steps to enable it:
 8.  Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
 
 ### Grafana Configuration
-
+![image info](./src/img/cloud_logging_config.png)
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"
 3. Select "Google Cloud Logging"

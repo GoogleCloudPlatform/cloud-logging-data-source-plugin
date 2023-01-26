@@ -32,7 +32,9 @@
       }
     ],
     "screenshots": [
-      {"name": "google_cloud_logging_panel_1", "path": "img/google_cloud_logging_panel_1.png"}
+      {"name": "cloud_logging_config", "path": "img/cloud_logging_config.png"},
+      {"name": "cloud_logging_explore_view", "path": "img/cloud_logging_explore_view.png"},
+      {"name": "cloud_logging_dashboard_view", "path": "img/cloud_logging_dashboard_view.png"}
     ],
     "version": "%VERSION%",
     "updated": "%TODAY%"
