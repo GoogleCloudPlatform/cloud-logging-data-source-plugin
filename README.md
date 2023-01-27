@@ -18,7 +18,7 @@ You need to enable the resource manager API. Otherwise, your cloud projects will
 
 You can follow the steps to enable it:
 
-1. Navigate to the [cloud resource manager API page](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com]) in GCP and select your project
+1. Navigate to the [cloud resource manager API page](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com) in GCP and select your project
 2. Press the `Enable` button
 
 ### Generate a JWT file & Assign IAM Permissions
