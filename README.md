@@ -1,7 +1,7 @@
 # Google Cloud Logging Data Source
 
 ## Overview
-![image info](./src/img/cloud_logging_explore_view.png)
+![image info](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/cloud_logging_explore_view.png?raw=true)
 The Google Cloud Logging Data Source is a backend data source plugin for Grafana,
 which allows users to query and visualize their Google Cloud logs in Grafana.
 
@@ -17,7 +17,7 @@ You need to enable the resource manager API. Otherwise, your cloud projects will
 
 You can follow the steps to enable it:
 
-1. Navigate to the [cloud resource manager API page](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com]) in GCP and select your project
+1. Navigate to the [cloud resource manager API page](https://console.cloud.google.com/apis/library/cloudresourcemanager.googleapis.com) in GCP and select your project
 2. Press the `Enable` button
 
 ### Generate a JWT file & Assign IAM Permissions
@@ -34,7 +34,7 @@ You can follow the steps to enable it:
 If you want to access logs in multiple cloud projects, you need to ensure the service account has permission to read logs from all of them.
 
 ### Grafana Configuration
-![image info](./src/img/cloud_logging_config.png)
+![image info](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/cloud_logging_config.png?raw=true)
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"
 3. Select "Google Cloud Logging"
