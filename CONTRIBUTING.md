@@ -25,6 +25,10 @@ This project follows
 
 ## Contribution process
 
+### Download
+
+Download this plugin to the machine Grafana is running on, either using `git clone` or simply downloading it as a ZIP file. For the purpose of this guide, we'll assume the user "alice" has downloaded it into their local directory "/Users/alice/grafana/". If you are running the Grafana server using a user such as `grafana`, make sure the user has access to the directory.
+
 ### Build the plugin
 
 If you download the source, you need to build the plugin. Make sure you have all the prerequisites installed and configured:
