@@ -8,10 +8,6 @@ which allows users to query and visualize their Google Cloud logs in Grafana.
 
 ## Setup
 
-### Download
-
-Download this plugin to the machine Grafana is running on, either using `git clone` or simply downloading it as a ZIP file. For the purpose of this guide, we'll assume the user "alice" has downloaded it into their local directory "/Users/alice/grafana/". If you are running the Grafana server using a user such as `grafana`, make sure the user has access to the directory.
-
 ### Enable Cloud Resource Manager API
 
 You need to enable the resource manager API. Otherwise, your cloud projects will not be displayed in the dropdown menu.
