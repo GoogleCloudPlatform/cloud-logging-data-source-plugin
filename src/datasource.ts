@@ -45,4 +45,8 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
       return [];
     }
   }
+
+  filterQuery(query: Query): boolean {
+    return !query.hide;
+  }
 }

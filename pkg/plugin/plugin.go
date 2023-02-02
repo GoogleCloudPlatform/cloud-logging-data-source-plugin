@@ -180,7 +180,6 @@ func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.Que
 type queryModel struct {
 	QueryText string `json:"queryText"`
 	ProjectID string `json:"projectId"`
-	Hide      bool   `json:"hide"`
 }
 
 func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -189,11 +188,6 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 	var q queryModel
 	response.Error = json.Unmarshal(query.JSON, &q)
 	if response.Error != nil {
-		return response
-	}
-
-	// Don't query if query should be hidden
-	if q.Hide {
 		return response
 	}
 
@@ -260,28 +254,7 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
 
-	privateKey, ok := settings.DecryptedSecureJSONData[privateKeyKey]
-	if !ok || privateKey == "" {
-		return nil, errMissingCredentials
-	}
-
-	serviceAccount, err := conf.toServiceAccountJSON(privateKey)
-	if err != nil {
-		return nil, fmt.Errorf("create credentials: %w", err)
-	}
-
-	client, err := cloudlogging.NewClient(ctx, serviceAccount, conf.Endpoint)
-	if err != nil {
-		return nil, err
-	}
-
-	defer func() {
-		if err := client.Close(); err != nil {
-			log.DefaultLogger.Warn("failed closing client", "error", err)
-		}
-	}()
-
-	if err := client.TestConnection(ctx, conf.DefaultProject); err != nil {
+	if err := d.client.TestConnection(ctx, conf.DefaultProject); err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: fmt.Sprintf("failed to run test query: %s", err),
