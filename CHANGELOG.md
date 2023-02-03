@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.1 (2023-02-03)
+
+* Move hide logic to datasource.ts filter and reuse client for test connection
+* Update dependencies in package.json
+
 ## 1.1.0 (2023-01-26)
 
 * Adds Cloud Logging Service Endpoint to configuration
