@@ -1,0 +1,293 @@
+{
+  "__inputs": [
+    {
+      "name": "DS_GOOGLE_CLOUD MONITORING",
+      "label": "Google Cloud Monitoring",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "stackdriver",
+      "pluginName": "Google Cloud Monitoring"
+    },
+    {
+      "name": "DS_GOOGLE_CLOUD LOGGING",
+      "label": "Google Cloud Logging",
+      "description": "",
+      "type": "datasource",
+      "pluginId": "googlecloud-logging-datasource",
+      "pluginName": "Google Cloud Logging"
+    }
+  ],
+  "__elements": {},
+  "__requires": [
+    {
+      "type": "datasource",
+      "id": "googlecloud-logging-datasource",
+      "name": "Google Cloud Logging",
+      "version": "1.1.1"
+    },
+    {
+      "type": "grafana",
+      "id": "grafana",
+      "name": "Grafana",
+      "version": "9.3.6"
+    },
+    {
+      "type": "panel",
+      "id": "logs",
+      "name": "Logs",
+      "version": ""
+    },
+    {
+      "type": "datasource",
+      "id": "stackdriver",
+      "name": "Google Cloud Monitoring",
+      "version": "1.0.0"
+    },
+    {
+      "type": "panel",
+      "id": "timeseries",
+      "name": "Time series",
+      "version": ""
+    }
+  ],
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "target": {
+          "limit": 100,
+          "matchAny": false,
+          "tags": [],
+          "type": "dashboard"
+        },
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "stackdriver",
+        "uid": "${DS_GOOGLE_CLOUD MONITORING}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 0,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "9.3.6",
+      "targets": [
+        {
+          "datasource": {
+            "type": "stackdriver",
+            "uid": "${DS_GOOGLE_CLOUD MONITORING}"
+          },
+          "metricQuery": {
+            "aliasBy": "",
+            "alignmentPeriod": "cloud-monitoring-auto",
+            "crossSeriesReducer": "REDUCE_SUM",
+            "editorMode": "mql",
+            "filters": [
+              "metric.label.severity",
+              "=",
+              "ERROR"
+            ],
+            "groupBys": [
+              "metric.label.severity"
+            ],
+            "metricKind": "DELTA",
+            "metricType": "logging.googleapis.com/log_entry_count",
+            "perSeriesAligner": "ALIGN_MEAN",
+            "preprocessor": "none",
+            "query": "fetch k8s_container\n| metric 'logging.googleapis.com/byte_count'\n| filter (metric.severity == 'WARNING' || metric.severity == 'ERROR')\n| align rate(1m)\n| every 1m\n| group_by [metric.severity], [aggregate(value.byte_count)]\n",
+            "valueType": "INT64"
+          },
+          "queryType": "metrics",
+          "refId": "A"
+        }
+      ],
+      "title": "Container Log Byte Count",
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "keepLabels": [
+              "metric.label.severity"
+            ],
+            "valueLabel": "metric.label.severity"
+          }
+        }
+      ],
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "${DS_GOOGLE_CLOUD LOGGING}"
+      },
+      "gridPos": {
+        "h": 20,
+        "w": 12,
+        "x": 0,
+        "y": 12
+      },
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": false,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "projectId": "<Google Cloud Project Id>",
+          "queryText": "severity=ERROR\nresource.type=\"k8s_container\"",
+          "refId": "A",
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "${DS_GOOGLE_CLOUD LOGGING}"
+          }
+        }
+      ],
+      "title": "Error Logs",
+      "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "googlecloud-logging-datasource",
+        "uid": "${DS_GOOGLE_CLOUD LOGGING}"
+      },
+      "gridPos": {
+        "h": 20,
+        "w": 12,
+        "x": 12,
+        "y": 12
+      },
+      "id": 3,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "targets": [
+        {
+          "projectId": "<Google Cloud Project Id>",
+          "queryText": "severity=WARNING\nresource.type=\"k8s_container\"",
+          "refId": "A",
+          "datasource": {
+            "type": "googlecloud-logging-datasource",
+            "uid": "${DS_GOOGLE_CLOUD LOGGING}"
+          }
+        }
+      ],
+      "title": "Warning Logs",
+      "type": "logs"
+    }
+  ],
+  "refresh": false,
+  "schemaVersion": 37,
+  "style": "dark",
+  "tags": [],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-3h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "container_error_warning_logs",
+  "uid": "7twXIQ04z",
+  "version": 1,
+  "weekStart": ""
+}
