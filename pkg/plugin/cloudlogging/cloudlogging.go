@@ -66,7 +66,7 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 		fields := t.JsonPayload.GetFields()
 		for k, v := range fields {
 			if strings.ToLower(k) != "message" {
-				labels[k] = fieldToLabel(v)
+				fieldToLabels(labels, k, v)
 			}
 		}
 	}
@@ -87,16 +87,21 @@ func GetLogLevel(severity ltype.LogSeverity) string {
 	}
 }
 
-// fieldToLabel converts a LogEntry Field value to a stringified version
-func fieldToLabel(field *structpb.Value) string {
+// fieldToLabels converts a LogEntry Field value to a stringified version,
+// recursively converting nested structs.
+func fieldToLabels(labels data.Labels, fieldName string, field *structpb.Value) {
 	switch t := field.GetKind().(type) {
 	case *structpb.Value_NumberValue:
-		return fmt.Sprintf("%v", t.NumberValue)
+		labels[fieldName] = fmt.Sprintf("%v", t.NumberValue)
 	case *structpb.Value_BoolValue:
-		return fmt.Sprintf("%t", t.BoolValue)
+		labels[fieldName] = fmt.Sprintf("%t", t.BoolValue)
 	case *structpb.Value_StringValue:
-		return t.StringValue
+		labels[fieldName] = t.StringValue
+	case *structpb.Value_StructValue:
+		for key, value := range t.StructValue.GetFields() {
+			fieldToLabels(labels, fmt.Sprintf("%s.%s", fieldName, key), value)
+		}
 	default:
-		return field.String()
+		labels[fieldName] = field.String()
 	}
 }
