@@ -280,6 +280,14 @@ func TestGetLogLabels(t *testing.T) {
 							"db":         {Kind: &structpb.Value_StringValue{StringValue: "database-experiencing-error"}},
 							"is_serious": {Kind: &structpb.Value_BoolValue{BoolValue: true}},
 							"message":    {Kind: &structpb.Value_StringValue{StringValue: "Something very bad happened!"}},
+							"service_context": {Kind: &structpb.Value_StructValue{
+								StructValue: &structpb.Struct{
+									Fields: map[string]*structpb.Value{
+										"service": {Kind: &structpb.Value_StringValue{StringValue: "some-service"}},
+										"version": {Kind: &structpb.Value_StringValue{StringValue: "v42"}},
+									},
+								},
+							}},
 						},
 					},
 				},
@@ -300,6 +308,8 @@ func TestGetLogLabels(t *testing.T) {
 				"resource.labels.instance_id": "98765",
 				"resource.type":               "gce_instance",
 				"level":                       "alert",
+				"service_context.service":     "some-service",
+				"service_context.version":     "v42",
 			},
 		},
 	}
