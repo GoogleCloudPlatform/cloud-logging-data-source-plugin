@@ -82,9 +82,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
             allowCustomValue
             formatCreateLabel={(v) => `Use project: ${v}`}
             onChange={e => onChange({
-              queryText: query.queryText,
+              ...query,
               projectId: e.value!,
-              refId: query.refId,
             })}
             options={projects}
             value={query.projectId}
@@ -101,9 +100,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         placeholder="Enter a Cloud Logging query (Run with Shift+Enter)"
         onBlur={onRunQuery}
         onChange={e => onChange({
+          ...query,
           queryText: e.currentTarget.value,
-          projectId: query.projectId,
-          refId: query.refId,
         })}
         onKeyDown={onKeyDown}
       />
