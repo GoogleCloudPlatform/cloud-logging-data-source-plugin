@@ -103,3 +103,4 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
 function escapeLabelValue(labelValue: string): string {
   return labelValue.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
 }
+
