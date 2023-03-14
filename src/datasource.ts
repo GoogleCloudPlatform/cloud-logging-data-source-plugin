@@ -14,14 +14,18 @@
  * limitations under the License.
  */
 
-import { DataSourceInstanceSettings } from '@grafana/data';
-import { BackendSrv, DataSourceWithBackend, getBackendSrv } from '@grafana/runtime';
+import { DataSourceInstanceSettings, ScopedVars } from '@grafana/data';
+import { BackendSrv, DataSourceWithBackend, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 import { CloudLoggingOptions, Query } from './types';
 
 export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions> {
-  constructor(private instanceSettings: DataSourceInstanceSettings<CloudLoggingOptions>) {
+  constructor(
+    private instanceSettings: DataSourceInstanceSettings<CloudLoggingOptions>,
+    private readonly templateSrv: TemplateSrv = getTemplateSrv(),
+  ) {
     super(instanceSettings);
   }
+
   /**
    * Get the Project ID we parsed from the data source's JWT token
    *
@@ -30,6 +34,7 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   getDefaultProject(): string {
     return this.instanceSettings.jsonData.defaultProject ?? '';
   }
+
   /**
    * Have the backend call `resourcemanager.projects.list` with our credentials,
    * and return the IDs of all projects found
@@ -44,6 +49,13 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     } catch (ex: unknown) {
       return [];
     }
+  }
+
+  applyTemplateVariables(query: Query, scopedVars: ScopedVars): Query {
+    return {
+      ...query,
+      queryText: this.templateSrv.replace(query.queryText, scopedVars),
+    };
   }
 
   filterQuery(query: Query): boolean {
