@@ -14,14 +14,18 @@
  * limitations under the License.
  */
 
-import { DataSourceInstanceSettings, QueryFixAction } from '@grafana/data';
-import { BackendSrv, DataSourceWithBackend, getBackendSrv } from '@grafana/runtime';
+import { DataSourceInstanceSettings, QueryFixAction, ScopedVars } from '@grafana/data';
+import { BackendSrv, DataSourceWithBackend, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 import { CloudLoggingOptions, Query } from './types';
 
 export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions> {
-  constructor(private instanceSettings: DataSourceInstanceSettings<CloudLoggingOptions>) {
+  constructor(
+    private instanceSettings: DataSourceInstanceSettings<CloudLoggingOptions>,
+    private readonly templateSrv: TemplateSrv = getTemplateSrv(),
+  ) {
     super(instanceSettings);
   }
+
   /**
    * Get the Project ID we parsed from the data source's JWT token
    *
@@ -30,6 +34,7 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   getDefaultProject(): string {
     return this.instanceSettings.jsonData.defaultProject ?? '';
   }
+
   /**
    * Have the backend call `resourcemanager.projects.list` with our credentials,
    * and return the IDs of all projects found
@@ -46,19 +51,38 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     }
   }
 
+  applyTemplateVariables(query: Query, scopedVars: ScopedVars): Query {
+    return {
+      ...query,
+      queryText: this.templateSrv.replace(query.queryText, scopedVars),
+    };
+  }
+
   modifyQuery(query: Query, action: QueryFixAction): Query {
     let queryText = query.queryText;
 
     switch (action.type) {
       case 'ADD_FILTER': {
         if (action.options?.key && action.options?.value) {
-          queryText += `\n${action.options.key}="${escapeLabelValue(action.options.value)}"`;
+          if (action.options?.key === "id") {
+            queryText += `\ninsertId="${escapeLabelValue(action.options.value)}"`;
+          } else if (action.options?.key === "level") {
+            queryText += `\nseverity="${escapeLabelValue(action.options.value)}"`;
+          } else {
+            queryText += `\n${action.options.key}="${escapeLabelValue(action.options.value)}"`;
+          }
         }
         break;
       }
       case 'ADD_FILTER_OUT': {
         if (action.options?.key && action.options?.value) {
-          queryText += `\n${action.options.key}!="${escapeLabelValue(action.options.value)}"`;
+          if (action.options?.key === "id") {
+            queryText += `\ninsertId!="${escapeLabelValue(action.options.value)}"`;
+          } else if (action.options?.key === "level") {
+            queryText += `\nseverity!="${escapeLabelValue(action.options.value)}"`;
+          } else {
+            queryText += `\n${action.options.key}!="${escapeLabelValue(action.options.value)}"`;
+          }
         }
         break;
       }
@@ -71,7 +95,6 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     return !query.hide;
   }
 }
-
 
 // the 3 symbols we handle are:
 // - \n ... the newline character
