@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { DataSourceInstanceSettings, ScopedVars } from '@grafana/data';
+import { DataSourceInstanceSettings, QueryFixAction, ScopedVars } from '@grafana/data';
 import { BackendSrv, DataSourceWithBackend, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 import { CloudLoggingOptions, Query } from './types';
 
@@ -58,7 +58,49 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     };
   }
 
+  modifyQuery(query: Query, action: QueryFixAction): Query {
+    let queryText = query.queryText;
+
+    switch (action.type) {
+      case 'ADD_FILTER': {
+        if (action.options?.key && action.options?.value) {
+          if (action.options?.key === "id") {
+            queryText += `\ninsertId="${escapeLabelValue(action.options.value)}"`;
+          } else if (action.options?.key === "level") {
+            queryText += `\nseverity="${escapeLabelValue(action.options.value)}"`;
+          } else {
+            queryText += `\n${action.options.key}="${escapeLabelValue(action.options.value)}"`;
+          }
+        }
+        break;
+      }
+      case 'ADD_FILTER_OUT': {
+        if (action.options?.key && action.options?.value) {
+          if (action.options?.key === "id") {
+            queryText += `\ninsertId!="${escapeLabelValue(action.options.value)}"`;
+          } else if (action.options?.key === "level") {
+            queryText += `\nseverity!="${escapeLabelValue(action.options.value)}"`;
+          } else {
+            queryText += `\n${action.options.key}!="${escapeLabelValue(action.options.value)}"`;
+          }
+        }
+        break;
+      }
+    }
+
+    return { ...query, queryText: queryText };
+  }
+
   filterQuery(query: Query): boolean {
     return !query.hide;
   }
 }
+
+// the 3 symbols we handle are:
+// - \n ... the newline character
+// - \  ... the backslash character
+// - "  ... the double-quote character
+function escapeLabelValue(labelValue: string): string {
+  return labelValue.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
+}
+

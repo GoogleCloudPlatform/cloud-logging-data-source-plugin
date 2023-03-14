@@ -46,7 +46,7 @@ func GetLogEntryMessage(entry *loggingpb.LogEntry) (string, error) {
 func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 	labels := make(data.Labels)
 	for k, v := range entry.GetLabels() {
-		labels[k] = v
+		labels[fmt.Sprintf("labels.\"%s\"", k)] = v
 	}
 
 	labels["id"] = entry.GetInsertId()
@@ -66,7 +66,7 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 		fields := t.JsonPayload.GetFields()
 		for k, v := range fields {
 			if strings.ToLower(k) != "message" {
-				fieldToLabels(labels, k, v)
+				fieldToLabels(labels, fmt.Sprintf("jsonPayload.%s", k), v)
 			}
 		}
 	}
