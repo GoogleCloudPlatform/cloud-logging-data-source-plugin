@@ -15,40 +15,54 @@
  */
 
 import { DataSourceInstanceSettings, QueryFixAction, ScopedVars } from '@grafana/data';
-import { BackendSrv, DataSourceWithBackend, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
+import { DataSourceWithBackend, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 import { CloudLoggingOptions, Query } from './types';
 
 export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions> {
+  authenticationType: string;
+
   constructor(
     private instanceSettings: DataSourceInstanceSettings<CloudLoggingOptions>,
     private readonly templateSrv: TemplateSrv = getTemplateSrv(),
   ) {
     super(instanceSettings);
+    this.authenticationType = instanceSettings.jsonData.authenticationType || 'jwt';
   }
 
   /**
-   * Get the Project ID we parsed from the data source's JWT token
+   * Get the Project ID from GCE or we parsed from the data source's JWT token
    *
-   * @returns Project ID from the provided JWT token
+   * @returns Project ID
    */
-  getDefaultProject(): string {
-    return this.instanceSettings.jsonData.defaultProject ?? '';
+  async getDefaultProject() {
+    const { defaultProject, authenticationType } = this.instanceSettings.jsonData;
+    if (authenticationType === 'gce') {
+      await this.ensureGCEDefaultProject();
+      return this.instanceSettings.jsonData.gceDefaultProject || "";
+    }
+
+    return defaultProject || '';
+  }
+
+  async getGCEDefaultProject() {
+    return this.getResource(`gceDefaultProject`);
+  }
+
+  async ensureGCEDefaultProject() {
+    const { authenticationType, gceDefaultProject } = this.instanceSettings.jsonData;
+    if (authenticationType === 'gce' && !gceDefaultProject) {
+      this.instanceSettings.jsonData.gceDefaultProject = await this.getGCEDefaultProject();
+    }
   }
 
   /**
    * Have the backend call `resourcemanager.projects.list` with our credentials,
    * and return the IDs of all projects found
    *
-   * @param backendSrv  {@link BackendSrv} to make the request, only exposed for tests
    * @returns List of discovered project IDs
    */
-  async getProjects(backendSrv: BackendSrv = getBackendSrv()): Promise<string[]> {
-    try {
-      const res = await backendSrv.get(`/api/datasources/${this.id}/resources/projects`);
-      return res.projects;
-    } catch (ex: unknown) {
-      return [];
-    }
+  getProjects(): Promise<string[]> {
+    return this.getResource(`projects`);
   }
 
   applyTemplateVariables(query: Query, scopedVars: ScopedVars): Query {
@@ -87,7 +101,6 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
         break;
       }
     }
-
     return { ...query, queryText: queryText };
   }
 
@@ -103,4 +116,3 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
 function escapeLabelValue(labelValue: string): string {
   return labelValue.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
 }
-

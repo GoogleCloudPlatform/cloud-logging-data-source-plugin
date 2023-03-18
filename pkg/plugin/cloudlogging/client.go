@@ -52,13 +52,32 @@ type Client struct {
 }
 
 // NewClient creates a new Client using jsonCreds for authentication
-func NewClient(ctx context.Context, jsonCreds []byte, endpoint string) (*Client, error) {
+func NewClient(ctx context.Context, jsonCreds []byte) (*Client, error) {
 	client, err := logging.NewClient(ctx, option.WithCredentialsJSON(jsonCreds),
-		option.WithUserAgent("googlecloud-logging-datasource"), option.WithEndpoint(endpoint))
+		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
 	}
 	rClient, err := resourcemanager.NewService(ctx, option.WithCredentialsJSON(jsonCreds),
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		lClient: client,
+		rClient: rClient.Projects,
+	}, nil
+}
+
+// NewClient creates a new Client using GCE metadata for authentication
+func NewClientWithGCE(ctx context.Context) (*Client, error) {
+	client, err := logging.NewClient(ctx,
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	rClient, err := resourcemanager.NewService(ctx,
 		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err

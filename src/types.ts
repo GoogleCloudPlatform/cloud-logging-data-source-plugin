@@ -14,14 +14,19 @@
  * limitations under the License.
  */
 
-import { DataQuery } from '@grafana/data';
-import { DataSourceOptions } from '@grafana/google-sdk';
+import { DataQuery, SelectableValue } from '@grafana/data';
+import { DataSourceOptions, GoogleAuthType } from '@grafana/google-sdk';
+
+export const authTypes: Array<SelectableValue<string>> = [
+  { label: 'Google JWT File', value: GoogleAuthType.JWT },
+  { label: 'GCE Default Service Account', value: GoogleAuthType.GCE },
+];
 
 /**
- * DataSourceOptionsExt adds endpoint to DataSourceOptions
+ * DataSourceOptionsExt adds default GCE project to DataSourceOptions
  */
 export interface DataSourceOptionsExt extends DataSourceOptions {
-  endpoint?: string;
+  gceDefaultProject?: string;
 }
 
 /**
