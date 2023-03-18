@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.2.0 (2023-03-17)
+
+* Support GCE service account
+* Support field-based filters in Explore page
+* Interpolate variables in queries
+* Correctly extract label/value pairs from structs
+* Added a sample dashboard
 ## 1.1.1 (2023-02-03)
 
 * Move hide logic to datasource.ts filter and reuse client for test connection
