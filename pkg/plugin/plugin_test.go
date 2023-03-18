@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"cloud.google.com/go/logging/apiv2/loggingpb"
 	"github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/cloudlogging"
 	"github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/mocks"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
@@ -28,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/api/monitoredres"
 	ltype "google.golang.org/genproto/googleapis/logging/type"
-	loggingpb "google.golang.org/genproto/googleapis/logging/v2"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 

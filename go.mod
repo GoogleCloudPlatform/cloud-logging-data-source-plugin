@@ -21,7 +21,6 @@ require (
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	github.com/rivo/uniseg v0.4.4 // indirect
-	github.com/smartystreets/goconvey v1.6.4 // indirect
 	github.com/stretchr/testify v1.8.2
 	google.golang.org/api v0.110.0
 	google.golang.org/genproto v0.0.0-20230306155012-7f2fa6fef1f4
