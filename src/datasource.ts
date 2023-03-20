@@ -81,7 +81,13 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
           if (action.options?.key === "id") {
             queryText += `\ninsertId="${escapeLabelValue(action.options.value)}"`;
           } else if (action.options?.key === "level") {
-            queryText += `\nseverity="${escapeLabelValue(action.options.value)}"`;
+            let level = action.options.value;
+            if (level === "debug") {
+              level = "DEFAULT";
+            } else if (level === "critical") {
+              level = "EMERGENCY";
+            }
+            queryText += `\nseverity="${escapeLabelValue(level)}"`;
           } else {
             queryText += `\n${action.options.key}="${escapeLabelValue(action.options.value)}"`;
           }
