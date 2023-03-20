@@ -46,8 +46,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
 
 
   // Apply defaults if needed
-  if (query.projectId == null) {
-    query.projectId = datasource.getDefaultProject();
+  if (!query.projectId) {
+    datasource.getDefaultProject().then(r => query.projectId = r);
   }
   if (query.queryText == null) {
     query.queryText = defaultQuery.queryText;

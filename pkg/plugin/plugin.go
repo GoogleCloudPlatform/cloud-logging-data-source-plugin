@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/cloudlogging"
+	"github.com/grafana/grafana-google-sdk-go/pkg/utils"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
@@ -39,7 +40,9 @@ var (
 )
 
 const (
-	privateKeyKey = "privateKey"
+	privateKeyKey     = "privateKey"
+	gceAuthentication = "gce"
+	jwtAuthentication = "jwt"
 )
 
 // config is the fields parsed from the front end
@@ -48,7 +51,6 @@ type config struct {
 	ClientEmail    string `json:"clientEmail"`
 	DefaultProject string `json:"defaultProject"`
 	TokenURI       string `json:"tokenUri"`
-	Endpoint       string `json:"endpoint"`
 }
 
 // toServiceAccountJSON creates the serviceAccountJSON bytes from the config fields
@@ -79,19 +81,30 @@ func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (ins
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
 
-	privateKey, ok := settings.DecryptedSecureJSONData[privateKeyKey]
-	if !ok || privateKey == "" {
-		return nil, errMissingCredentials
+	if conf.AuthType == "" {
+		conf.AuthType = jwtAuthentication
 	}
 
-	serviceAccount, err := conf.toServiceAccountJSON(privateKey)
-	if err != nil {
-		return nil, fmt.Errorf("create credentials: %w", err)
-	}
+	var client_err error
+	var client *cloudlogging.Client
 
-	client, err := cloudlogging.NewClient(context.TODO(), serviceAccount, conf.Endpoint)
-	if err != nil {
-		return nil, err
+	if conf.AuthType == jwtAuthentication {
+		privateKey, ok := settings.DecryptedSecureJSONData[privateKeyKey]
+		if !ok || privateKey == "" {
+			return nil, errMissingCredentials
+		}
+
+		serviceAccount, err := conf.toServiceAccountJSON(privateKey)
+		if err != nil {
+			return nil, fmt.Errorf("create credentials: %w", err)
+		}
+
+		client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount)
+	} else {
+		client, client_err = cloudlogging.NewClientWithGCE(context.TODO())
+	}
+	if client_err != nil {
+		return nil, client_err
 	}
 
 	return &CloudLoggingDatasource{
@@ -125,28 +138,42 @@ type ListProjectsResponse struct {
 func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	// log.DefaultLogger.Info("CallResource called")
 
-	// Right now we only support calls to `/projects`
+	var body []byte
+
+	// Right now we only support calls to `gceDefaultProject` and `/projects`
 	resource := req.Path
-	if strings.ToLower(resource) != "projects" {
+
+	if resource == "gceDefaultProject" {
+		proj, err := utils.GCEDefaultProject(ctx, "")
+		if err != nil {
+			log.DefaultLogger.Warn("problem getting GCE default project", "error", err)
+		}
+		body, err = json.Marshal(proj)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusInternalServerError,
+				Body:   []byte(`Unable to create response`),
+			})
+		}
+	} else if strings.ToLower(resource) != "projects" {
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusNotFound,
 			Body:   []byte(`No such path`),
 		})
-	}
+	} else {
+		projects, err := d.client.ListProjects(ctx)
+		if err != nil {
+			log.DefaultLogger.Warn("problem listing projects", "error", err)
+		}
 
-	projects, err := d.client.ListProjects(ctx)
-	if err != nil {
-		log.DefaultLogger.Warn("problem listing projects", "error", err)
+		body, err = json.Marshal(projects)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusInternalServerError,
+				Body:   []byte(`Unable to create response`),
+			})
+		}
 	}
-
-	body, err := json.Marshal(&ListProjectsResponse{Projects: projects})
-	if err != nil {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: http.StatusInternalServerError,
-			Body:   []byte(`Unable to create response`),
-		})
-	}
-
 	return sender.Send(&backend.CallResourceResponse{
 		Status: http.StatusOK,
 		Body:   body,
@@ -254,6 +281,13 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 		return nil, fmt.Errorf("unmarshal: %w", err)
 	}
 
+	if conf.DefaultProject == "" && conf.AuthType == gceAuthentication {
+		proj, err := utils.GCEDefaultProject(ctx, "")
+		if err != nil {
+			return nil, fmt.Errorf("failed to get GCE default project: %w", err)
+		}
+		conf.DefaultProject = proj
+	}
 	if err := d.client.TestConnection(ctx, conf.DefaultProject); err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
