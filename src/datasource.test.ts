@@ -16,7 +16,6 @@
 
 import { DataSourcePluginMeta } from '@grafana/data';
 import { GoogleAuthType } from '@grafana/google-sdk';
-// import { BackendSrv } from '@grafana/runtime';
 import { random } from 'lodash';
 import { DataSource } from './datasource';
 
@@ -26,7 +25,6 @@ describe('Google Cloud Logging Data Source', () => {
         it('returns empty string if not set', () => {
             const ds = makeDataSource();
             ds.getDefaultProject().then(r => expect(r).toBe(''));
-            // expect(ds.getDefaultProject()).toBe('');
         });
         it('returns defaultProject from jsonData', () => {
             const projectId = `my-gcp-project-${random(100)}`;
@@ -44,7 +42,6 @@ describe('Google Cloud Logging Data Source', () => {
                 readOnly: true,
             });
             ds.getDefaultProject().then(r => expect(r).toBe(projectId));
-            // expect(ds.getDefaultProject()).toBe(projectId);
         });
     });
 });
