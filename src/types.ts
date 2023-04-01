@@ -34,6 +34,7 @@ export interface DataSourceOptionsExt extends DataSourceOptions {
  */
 export interface Query extends DataQuery {
   queryText?: string;
+  query?: string;
   projectId: string;
 }
 

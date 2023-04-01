@@ -49,6 +49,12 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   if (!query.projectId) {
     datasource.getDefaultProject().then(r => query.projectId = r);
   }
+
+  // Check query field from query params to support default way of propagating query from other parts of grafana.
+  if (query.query !== null) {
+    query.queryText = query.query;
+  }
+
   if (query.queryText == null) {
     query.queryText = defaultQuery.queryText;
   }
