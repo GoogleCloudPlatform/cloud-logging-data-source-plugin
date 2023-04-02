@@ -18,12 +18,12 @@ import (
 	"errors"
 	"testing"
 
+	"cloud.google.com/go/logging/apiv2/loggingpb"
 	"github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/cloudlogging"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/api/monitoredres"
 	ltype "google.golang.org/genproto/googleapis/logging/type"
-	loggingpb "google.golang.org/genproto/googleapis/logging/v2"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -257,8 +257,8 @@ func TestGetLogLabels(t *testing.T) {
 			},
 			expected: data.Labels{
 				"id":                          "insert-id2",
-				"labels.\"pid\"":                  "111",
-				"labels.\"LOG_BUCKET_NUM\"":       "1",
+				"labels.\"pid\"":              "111",
+				"labels.\"LOG_BUCKET_NUM\"":   "1",
 				"resource.labels.instance_id": "98765",
 				"resource.type":               "cloudsql_database",
 				"level":                       "debug",
@@ -304,7 +304,7 @@ func TestGetLogLabels(t *testing.T) {
 				"jsonPayload.tid":                     "222",
 				"jsonPayload.db":                      "database-experiencing-error",
 				"jsonPayload.is_serious":              "true",
-				"labels.\"LOG_BUCKET_NUM\"":               "1",
+				"labels.\"LOG_BUCKET_NUM\"":           "1",
 				"resource.labels.instance_id":         "98765",
 				"resource.type":                       "gce_instance",
 				"level":                               "alert",
