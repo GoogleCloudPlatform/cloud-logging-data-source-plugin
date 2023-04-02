@@ -15,6 +15,7 @@
 package cloudlogging
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -68,6 +69,16 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 			if strings.ToLower(k) != "message" {
 				fieldToLabels(labels, fmt.Sprintf("jsonPayload.%s", k), v)
 			}
+		}
+	}
+	// If httpRequest exists in the log entry, include it too
+	httpRequest := entry.GetHttpRequest()
+	if httpRequest != nil {
+		byteArr, _ := json.Marshal(httpRequest)
+		var inInterface map[string]interface{}
+		json.Unmarshal(byteArr, &inInterface)
+		for k, v := range inInterface {
+			labels[fmt.Sprintf("httpRequest.%s", k)] = fmt.Sprintf("%v", v)
 		}
 	}
 
