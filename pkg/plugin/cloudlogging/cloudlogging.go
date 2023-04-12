@@ -15,12 +15,13 @@
 package cloudlogging
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
+	"cloud.google.com/go/logging/apiv2/loggingpb"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	ltype "google.golang.org/genproto/googleapis/logging/type"
-	loggingpb "google.golang.org/genproto/googleapis/logging/v2"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -69,6 +70,21 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 				fieldToLabels(labels, fmt.Sprintf("jsonPayload.%s", k), v)
 			}
 		}
+	}
+	// If httpRequest exists in the log entry, include it too
+	httpRequest := entry.GetHttpRequest()
+	if httpRequest != nil {
+		byteArr, _ := json.Marshal(httpRequest)
+		var inInterface map[string]interface{}
+		json.Unmarshal(byteArr, &inInterface)
+		for k, v := range inInterface {
+			if k == "latency" {
+				labels["httpRequest.latency"] = httpRequest.Latency.AsDuration().String()
+			} else {
+				labels[fmt.Sprintf("httpRequest.%s", k)] = fmt.Sprintf("%v", v)
+			}
+		}
+
 	}
 
 	return labels

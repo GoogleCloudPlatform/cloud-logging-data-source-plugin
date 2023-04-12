@@ -27,7 +27,7 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
-	loggingpb "google.golang.org/genproto/googleapis/logging/v2"
+	"cloud.google.com/go/logging/apiv2/loggingpb"
 )
 
 const testConnectionTimeout = time.Minute * 1

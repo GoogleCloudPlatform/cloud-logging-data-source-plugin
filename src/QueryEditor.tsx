@@ -53,6 +53,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   // Check query field from query params to support default way of propagating query from other parts of grafana.
   if (query.query) {
     query.queryText = query.query;
+    query.query = undefined;
   }
 
   if (query.queryText == null) {

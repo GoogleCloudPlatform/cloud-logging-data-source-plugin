@@ -205,7 +205,8 @@ func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.Que
 
 // queryModel is the fields needed to query from Grafana
 type queryModel struct {
-	QueryText string `json:"queryText"`
+	QueryText string `json:"queryText,omitempty"`
+	Query     string `json:"query,omitempty"`
 	ProjectID string `json:"projectId"`
 }
 
@@ -218,9 +219,15 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 		return response
 	}
 
+	var qstr string
+	if q.QueryText != "" {
+		qstr = q.QueryText
+	} else if q.Query != "" {
+		qstr = q.Query
+	}
 	clientRequest := cloudlogging.Query{
 		ProjectID: q.ProjectID,
-		Filter:    q.QueryText,
+		Filter:    qstr,
 		Limit:     query.MaxDataPoints,
 		TimeRange: struct {
 			From string

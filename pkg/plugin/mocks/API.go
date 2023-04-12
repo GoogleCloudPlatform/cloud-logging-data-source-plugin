@@ -21,7 +21,7 @@ import (
 
 	cloudlogging "github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/cloudlogging"
 
-	logging "google.golang.org/genproto/googleapis/logging/v2"
+	logging "cloud.google.com/go/logging/apiv2/loggingpb"
 
 	mock "github.com/stretchr/testify/mock"
 )
