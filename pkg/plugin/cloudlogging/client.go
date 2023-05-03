@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	logging "cloud.google.com/go/logging/apiv2"
@@ -40,6 +41,10 @@ type API interface {
 	TestConnection(ctx context.Context, projectID string) error
 	// ListProjects returns the project IDs of all visible projects
 	ListProjects(context.Context) ([]string, error)
+	// ListProjectBuckets returns all log buckets of a project
+	ListProjectBuckets(ctx context.Context, projectId string) ([]string, error)
+	// ListProjectBucketViews returns all log buckets of a project
+	ListProjectBucketViews(ctx context.Context, projectId string, bucketId string) ([]string, error)
 	// Close closes the underlying connection to the GCP API
 	Close() error
 }
@@ -47,8 +52,9 @@ type API interface {
 // Client wraps a GCP logging client to fetch logs, and a resourcemanager client
 // to list projects
 type Client struct {
-	lClient *logging.Client
-	rClient *resourcemanager.ProjectsService
+	lClient      *logging.Client
+	rClient      *resourcemanager.ProjectsService
+	configClient *logging.ConfigClient
 }
 
 // NewClient creates a new Client using jsonCreds for authentication
@@ -64,9 +70,15 @@ func NewClient(ctx context.Context, jsonCreds []byte) (*Client, error) {
 		return nil, err
 	}
 
+	lcClient, err := logging.NewConfigClient(ctx, option.WithCredentialsJSON(jsonCreds),
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
-		lClient: client,
-		rClient: rClient.Projects,
+		lClient:      client,
+		rClient:      rClient.Projects,
+		configClient: lcClient,
 	}, nil
 }
 
@@ -82,10 +94,15 @@ func NewClientWithGCE(ctx context.Context) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-
+	lcClient, err := logging.NewConfigClient(ctx,
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
 	return &Client{
-		lClient: client,
-		rClient: rClient.Projects,
+		lClient:      client,
+		rClient:      rClient.Projects,
+		configClient: lcClient,
 	}, nil
 }
 
@@ -97,6 +114,8 @@ func (c *Client) Close() error {
 // Query is the information from a Grafana query needed to query GCP for logs
 type Query struct {
 	ProjectID string
+	BucketId  string
+	ViewId    string
 	Filter    string
 	Limit     int64
 	TimeRange struct {
@@ -130,6 +149,55 @@ func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
 	return projectIDs, nil
 }
 
+// ListProjectBucketsViews returns all views of a log bucket
+func (c *Client) ListProjectBucketViews(ctx context.Context, projectId string, bucketId string) ([]string, error) {
+	views := []string{""}
+
+	req := &loggingpb.ListViewsRequest{
+		// See https://pkg.go.dev/cloud.google.com/go/logging/apiv2/loggingpb#ListViewsRequest
+		Parent: fmt.Sprintf("projects/%s/locations/%s", projectId, bucketId),
+	}
+	it := c.configClient.ListViews(ctx, req)
+	for {
+		resp, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		view := strings.Split(resp.Name, "/")
+		views = append(views, view[len(view)-1])
+	}
+
+	return views, nil
+}
+
+// ListProjectBuckets returns all log buckets of a project
+func (c *Client) ListProjectBuckets(ctx context.Context, projectId string) ([]string, error) {
+	buckets := []string{""}
+
+	req := &loggingpb.ListBucketsRequest{
+		// Request struct fields. Using '-' to get the full list
+		// See https://pkg.go.dev/cloud.google.com/go/logging/apiv2/loggingpb#ListBucketsRequest
+		Parent: fmt.Sprintf("projects/%s/locations/-", projectId),
+	}
+	it := c.configClient.ListBuckets(ctx, req)
+	for {
+		resp, err := it.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		bucket := strings.Split(resp.Name, "/")
+		buckets = append(buckets, strings.Join(bucket[3:], "/"))
+	}
+
+	return buckets, nil
+}
+
 // TestConnection queries for any log from the given project
 func (c *Client) TestConnection(ctx context.Context, projectID string) error {
 	start := time.Now()
@@ -142,7 +210,7 @@ func (c *Client) TestConnection(ctx context.Context, projectID string) error {
 	}()
 
 	it := c.lClient.ListLogEntries(listCtx, &loggingpb.ListLogEntriesRequest{
-		ResourceNames: []string{projectResourceName(projectID)},
+		ResourceNames: []string{legacyProjectResourceName(projectID)},
 		PageSize:      1,
 	})
 
@@ -172,8 +240,15 @@ func (c *Client) ListLogs(ctx context.Context, q *Query) ([]*loggingpb.LogEntry,
 	// Never exceed the maximum page size
 	pageSize := int32(math.Min(float64(q.Limit), 1000))
 
+	resourceName := []string{}
+	if q.BucketId == "" {
+		resourceName = append(resourceName, legacyProjectResourceName(q.ProjectID))
+	} else {
+		resourceName = append(resourceName, projectResourceName(q.ProjectID, q.BucketId, q.ViewId))
+	}
+
 	req := loggingpb.ListLogEntriesRequest{
-		ResourceNames: []string{projectResourceName(q.ProjectID)},
+		ResourceNames: resourceName,
 		Filter:        q.String(),
 		OrderBy:       "timestamp desc",
 		PageSize:      pageSize,
@@ -210,6 +285,14 @@ func (c *Client) ListLogs(ctx context.Context, q *Query) ([]*loggingpb.LogEntry,
 	return entries, nil
 }
 
-func projectResourceName(projectID string) string {
+func legacyProjectResourceName(projectID string) string {
 	return fmt.Sprintf("projects/%s", projectID)
+}
+
+func projectResourceName(projectId string, bucketId string, viewId string) string {
+	if viewId != "" {
+		return fmt.Sprintf("projects/%s/locations/%s/views/%s", projectId, bucketId, viewId)
+	} else {
+		return fmt.Sprintf("projects/%s/locations/%s/views/_AllLogs", projectId, bucketId)
+	}
 }

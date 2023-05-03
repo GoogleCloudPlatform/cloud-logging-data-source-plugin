@@ -65,6 +65,26 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     return this.getResource(`projects`);
   }
 
+  /**
+   * Have the backend call `projects.locations.buckets.list` with our credentials,
+   * and return the names of all log buckets found
+   *
+   * @returns List of discovered bucket names
+   */
+  getLogBuckets(projectId: string): Promise<string[]> {
+    return this.getResource(`logBuckets`, { "ProjectId": projectId });
+  }
+
+  /**
+   * Have the backend call `projects.locations.buckets.views.list` with our credentials,
+   * and return the names of all views of the log bucket
+   *
+   * @returns List of discovered bucket names
+   */
+  getLogBucketViews(projectId: string, bucketId: string): Promise<string[]> {
+    return this.getResource(`logViews`, { "ProjectId": projectId, "BucketId": bucketId });
+  }
+
   applyTemplateVariables(query: Query, scopedVars: ScopedVars): Query {
     return {
       ...query,
