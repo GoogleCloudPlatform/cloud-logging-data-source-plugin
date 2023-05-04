@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.1 (2023-05-05)
+
+* Support log scope
+* Fix httpRequest 
 ## 1.2.0 (2023-03-17)
 
 * Support GCE service account

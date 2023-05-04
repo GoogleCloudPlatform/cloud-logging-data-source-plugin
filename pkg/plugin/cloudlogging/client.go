@@ -43,14 +43,14 @@ type API interface {
 	ListProjects(context.Context) ([]string, error)
 	// ListProjectBuckets returns all log buckets of a project
 	ListProjectBuckets(ctx context.Context, projectId string) ([]string, error)
-	// ListProjectBucketViews returns all log buckets of a project
+	// ListProjectBucketViews returns all views of a log bucket
 	ListProjectBucketViews(ctx context.Context, projectId string, bucketId string) ([]string, error)
 	// Close closes the underlying connection to the GCP API
 	Close() error
 }
 
-// Client wraps a GCP logging client to fetch logs, and a resourcemanager client
-// to list projects
+// Client wraps a GCP logging client to fetch logs, a resourcemanager client
+// to list projects, and a config client to get log bucket configurations
 type Client struct {
 	lClient      *logging.Client
 	rClient      *resourcemanager.ProjectsService
@@ -70,7 +70,7 @@ func NewClient(ctx context.Context, jsonCreds []byte) (*Client, error) {
 		return nil, err
 	}
 
-	lcClient, err := logging.NewConfigClient(ctx, option.WithCredentialsJSON(jsonCreds),
+	configClient, err := logging.NewConfigClient(ctx, option.WithCredentialsJSON(jsonCreds),
 		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
@@ -78,11 +78,11 @@ func NewClient(ctx context.Context, jsonCreds []byte) (*Client, error) {
 	return &Client{
 		lClient:      client,
 		rClient:      rClient.Projects,
-		configClient: lcClient,
+		configClient: configClient,
 	}, nil
 }
 
-// NewClient creates a new Client using GCE metadata for authentication
+// NewClient creates a new Clients using GCE metadata for authentication
 func NewClientWithGCE(ctx context.Context) (*Client, error) {
 	client, err := logging.NewClient(ctx,
 		option.WithUserAgent("googlecloud-logging-datasource"))
@@ -94,7 +94,7 @@ func NewClientWithGCE(ctx context.Context) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	lcClient, err := logging.NewConfigClient(ctx,
+	configClient, err := logging.NewConfigClient(ctx,
 		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
@@ -102,12 +102,13 @@ func NewClientWithGCE(ctx context.Context) (*Client, error) {
 	return &Client{
 		lClient:      client,
 		rClient:      rClient.Projects,
-		configClient: lcClient,
+		configClient: configClient,
 	}, nil
 }
 
 // Close closes the underlying connection to the GCP API
 func (c *Client) Close() error {
+	c.configClient.Close()
 	return c.lClient.Close()
 }
 
@@ -166,7 +167,9 @@ func (c *Client) ListProjectBucketViews(ctx context.Context, projectId string, b
 		if err != nil {
 			return nil, err
 		}
+		// See response format: https://cloud.google.com/logging/docs/reference/v2/rest/v2/billingAccounts.locations.buckets.views#LogView
 		view := strings.Split(resp.Name, "/")
+		// Append `my-view` for `projects/my-project/locations/global/buckets/my-bucket/views/my-view`
 		views = append(views, view[len(view)-1])
 	}
 
@@ -191,7 +194,9 @@ func (c *Client) ListProjectBuckets(ctx context.Context, projectId string) ([]st
 		if err != nil {
 			return nil, err
 		}
+		// See response format: https://cloud.google.com/logging/docs/reference/v2/rest/v2/billingAccounts.locations.buckets#LogBucket
 		bucket := strings.Split(resp.Name, "/")
+		// Get `global/buckets/my-bucket` for `projects/my-project/locations/global/buckets/my-bucket`
 		buckets = append(buckets, strings.Join(bucket[3:], "/"))
 	}
 
@@ -293,6 +298,7 @@ func projectResourceName(projectId string, bucketId string, viewId string) strin
 	if viewId != "" {
 		return fmt.Sprintf("projects/%s/locations/%s/views/%s", projectId, bucketId, viewId)
 	} else {
+		// Use default `_AllLogs` view
 		return fmt.Sprintf("projects/%s/locations/%s/views/_AllLogs", projectId, bucketId)
 	}
 }

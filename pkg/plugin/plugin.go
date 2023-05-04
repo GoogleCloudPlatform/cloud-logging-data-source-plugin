@@ -189,7 +189,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 
 		views, err := d.client.ListProjectBucketViews(ctx, params.Get("ProjectId"), params.Get("BucketId"))
 		if err != nil {
-			log.DefaultLogger.Warn("problem listing log buckets", "error", err)
+			log.DefaultLogger.Warn("problem listing log views", "error", err)
 		}
 
 		body, err = json.Marshal(views)

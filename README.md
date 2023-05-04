@@ -24,11 +24,13 @@ You can follow the steps to enable it:
 3. Click **Create Credentials** then click **Service account**
 4. On the Create service account page, enter the Service account details
 5. On the `Create service account` page, fill in the `Service account details` and then click `Create and Continue`
-6. On the `Grant this service account access to project` section, select the `Logs Viewer` role under `Logging` to the service account. Click `Done`
+6. On the `Grant this service account access to project` section, add the `Logs Viewer` role and `Logs View Accessor` role under `Logging` to the service account. Click `Done`
 7. In the next step, click the service account you just created. Under the `Keys` tab and select `Add key` and `Create new key`
 8. Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
 
 If you want to access logs in multiple cloud projects, you need to ensure the service account has permission to read logs from all of them.
+
+If you host Grafana on a GCE VM, you can also use the [Compute Engine service account](https://cloud.google.com/compute/docs/access/service-accounts#serviceaccount). You need to make sure the service account has sufficient permissions to access the logs, including log buckets and views.
 
 ### Grafana Configuration
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)

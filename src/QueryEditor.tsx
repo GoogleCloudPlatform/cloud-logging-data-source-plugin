@@ -61,7 +61,6 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   }, [datasource]);
 
   const [buckets, setBuckets] = useState<Array<SelectableValue<string>>>();
-  //TODO: refactor the code here
   useEffect(() => {
     if (!query.projectId) {
       datasource.getDefaultProject().then(r => {
@@ -84,7 +83,6 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   }, [datasource, query]);
 
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
-  //TODO: refactor the code here
   useEffect(() => {
     datasource.getLogBucketViews(query.projectId, `${query.bucketId}`).then(res => {
       setViews(res.map(view => ({
