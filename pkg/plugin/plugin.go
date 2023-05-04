@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -127,23 +128,21 @@ func (d *CloudLoggingDatasource) Dispose() {
 	}
 }
 
-// ListProjectsResponse is our response to a call to `/resources/projects`
-type ListProjectsResponse struct {
-	Projects []string `json:"projects"`
-}
-
 // CallResource fetches some resource from GCP using the data source's credentials
-//
-// Currently only projects are fetched, other requests receive a 404
+// Currently limited resources are fetched, other requests receive a 404
 func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	// log.DefaultLogger.Info("CallResource called")
 
 	var body []byte
 
-	// Right now we only support calls to `gceDefaultProject` and `/projects`
-	resource := req.Path
+	// Right now we only support calls to the following:
+	//`/gceDefaultProject`
+	//`/projects`
+	//`/logBuckets`
+	//`/logViews`
+	resource := strings.ToLower(req.Path)
 
-	if resource == "gceDefaultProject" {
+	if resource == "gcedefaultproject" {
 		proj, err := utils.GCEDefaultProject(ctx, "")
 		if err != nil {
 			log.DefaultLogger.Warn("problem getting GCE default project", "error", err)
@@ -155,12 +154,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 				Body:   []byte(`Unable to create response`),
 			})
 		}
-	} else if strings.ToLower(resource) != "projects" {
-		return sender.Send(&backend.CallResourceResponse{
-			Status: http.StatusNotFound,
-			Body:   []byte(`No such path`),
-		})
-	} else {
+	} else if resource == "projects" {
 		projects, err := d.client.ListProjects(ctx)
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing projects", "error", err)
@@ -173,6 +167,43 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 				Body:   []byte(`Unable to create response`),
 			})
 		}
+	} else if resource == "logbuckets" {
+		reqUrl, _ := url.Parse(req.URL)
+		params, _ := url.ParseQuery(reqUrl.RawQuery)
+
+		bucketNames, err := d.client.ListProjectBuckets(ctx, params.Get("ProjectId"))
+		if err != nil {
+			log.DefaultLogger.Warn("problem listing log buckets", "error", err)
+		}
+
+		body, err = json.Marshal(bucketNames)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusInternalServerError,
+				Body:   []byte(`Unable to create response`),
+			})
+		}
+	} else if resource == "logviews" {
+		reqUrl, _ := url.Parse(req.URL)
+		params, _ := url.ParseQuery(reqUrl.RawQuery)
+
+		views, err := d.client.ListProjectBucketViews(ctx, params.Get("ProjectId"), params.Get("BucketId"))
+		if err != nil {
+			log.DefaultLogger.Warn("problem listing log views", "error", err)
+		}
+
+		body, err = json.Marshal(views)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusInternalServerError,
+				Body:   []byte(`Unable to create response`),
+			})
+		}
+	} else {
+		return sender.Send(&backend.CallResourceResponse{
+			Status: http.StatusNotFound,
+			Body:   []byte(`No such path`),
+		})
 	}
 	return sender.Send(&backend.CallResourceResponse{
 		Status: http.StatusOK,
@@ -208,6 +239,8 @@ type queryModel struct {
 	QueryText string `json:"queryText,omitempty"`
 	Query     string `json:"query,omitempty"`
 	ProjectID string `json:"projectId"`
+	BucketId  string `json:"bucketId"`
+	ViewId    string `json:"viewId"`
 }
 
 func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
@@ -227,6 +260,8 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 	}
 	clientRequest := cloudlogging.Query{
 		ProjectID: q.ProjectID,
+		BucketId:  q.BucketId,
+		ViewId:    q.ViewId,
 		Filter:    qstr,
 		Limit:     query.MaxDataPoints,
 		TimeRange: struct {

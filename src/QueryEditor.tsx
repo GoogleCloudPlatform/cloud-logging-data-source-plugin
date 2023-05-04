@@ -34,17 +34,6 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     }
   };
 
-  const [projects, setProjects] = useState<Array<SelectableValue<string>>>();
-  useEffect(() => {
-    datasource.getProjects().then(res => {
-      setProjects(res.map(project => ({
-        label: project,
-        value: project,
-      })));
-    });
-  }, [datasource]);
-
-
   // Apply defaults if needed
   if (!query.projectId) {
     datasource.getDefaultProject().then(r => query.projectId = r);
@@ -59,6 +48,49 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   if (query.queryText == null) {
     query.queryText = defaultQuery.queryText;
   }
+
+
+  const [projects, setProjects] = useState<Array<SelectableValue<string>>>();
+  useEffect(() => {
+    datasource.getProjects().then(res => {
+      setProjects(res.map(project => ({
+        label: project,
+        value: project,
+      })));
+    });
+  }, [datasource]);
+
+  const [buckets, setBuckets] = useState<Array<SelectableValue<string>>>();
+  useEffect(() => {
+    if (!query.projectId) {
+      datasource.getDefaultProject().then(r => {
+        query.projectId = r;
+        datasource.getLogBuckets(query.projectId).then(res => {
+          setBuckets(res.map(bucket => ({
+            label: bucket,
+            value: bucket,
+          })));
+        });
+      });
+    } else {
+      datasource.getLogBuckets(query.projectId).then(res => {
+        setBuckets(res.map(bucket => ({
+          label: bucket,
+          value: bucket,
+        })));
+      });
+    }
+  }, [datasource, query]);
+
+  const [views, setViews] = useState<Array<SelectableValue<string>>>();
+  useEffect(() => {
+    datasource.getLogBucketViews(query.projectId, `${query.bucketId}`).then(res => {
+      setViews(res.map(view => ({
+        label: view,
+        value: view,
+      })));
+    });
+  }, [datasource, query]);
 
   /**
    * Keep an up-to-date URI that links to the equivalent query in the GCP console
@@ -91,11 +123,44 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
             onChange={e => onChange({
               ...query,
               projectId: e.value!,
+              bucketId: "",
+              viewId: "",
             })}
             options={projects}
             value={query.projectId}
             placeholder="Select Project"
             inputId={`${query.refId}-project`}
+          />
+        </InlineField>
+        <InlineField label='Log Bucket'>
+          <Select
+            width={40}
+            allowCustomValue
+            formatCreateLabel={(v) => `Use bucket: ${v}`}
+            onChange={e => onChange({
+              ...query,
+              bucketId: e.value!,
+              viewId: "",
+            })}
+            options={buckets}
+            value={query.bucketId}
+            placeholder="Select Log Bucket"
+            inputId={`${query.refId}-bucket`}
+          />
+        </InlineField>
+        <InlineField label='View'>
+          <Select
+            width={30}
+            allowCustomValue
+            formatCreateLabel={(v) => `Use view: ${v}`}
+            onChange={e => onChange({
+              ...query,
+              viewId: e.value!,
+            })}
+            options={views}
+            value={query.viewId}
+            placeholder="Select View"
+            inputId={`${query.refId}-view`}
           />
         </InlineField>
       </InlineFieldRow>

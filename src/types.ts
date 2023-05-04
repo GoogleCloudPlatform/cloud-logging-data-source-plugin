@@ -36,6 +36,8 @@ export interface Query extends DataQuery {
   queryText?: string;
   query?: string;
   projectId: string;
+  bucketId?: string;
+  viewId?: string;
 }
 
 /**
