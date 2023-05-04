@@ -30,7 +30,7 @@ You can follow the steps to enable it:
 
 If you want to access logs in multiple cloud projects, you need to ensure the service account has permission to read logs from all of them.
 
-If you host Grafana on a GCE VM, you can also use the [Compute Engine service account](https://cloud.google.com/compute/docs/access/service-accounts#serviceaccount). You need to make sure the service account has sufficient permissions to access the logs, including log buckets and views.
+If you host Grafana on a GCE VM, you can also use the [Compute Engine service account](https://cloud.google.com/compute/docs/access/service-accounts#serviceaccount). You need to make sure the service account has sufficient permissions to access the scopes and logs in all projects.
 
 ### Grafana Configuration
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)

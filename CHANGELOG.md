@@ -2,7 +2,7 @@
 
 ## 1.2.1 (2023-05-05)
 
-* Support log scope
+* Support log scope (need [roles/logging.viewAccessor](https://cloud.google.com/logging/docs/access-control#logging.viewAccessor))
 * Fix httpRequest 
 ## 1.2.0 (2023-03-17)
 
