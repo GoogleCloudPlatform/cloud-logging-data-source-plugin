@@ -37,7 +37,12 @@ jobs:
           then
             echo "has-backend=true" >> $GITHUB_OUTPUT
           fi
-
+          
+      - name: Sign plugin
+        run: yarn sign
+        env:
+          GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }} # Requires a Grafana API key from Grafana.com.
+          
       - name: Test backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: magefile/mage-action@v1
