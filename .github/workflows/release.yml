@@ -39,7 +39,7 @@ jobs:
           fi
           
       - name: Sign plugin
-        run: yarn sign
+        run: npx @grafana/sign-plugin@latest
         env:
           GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }} # Requires a Grafana API key from Grafana.com.
           
