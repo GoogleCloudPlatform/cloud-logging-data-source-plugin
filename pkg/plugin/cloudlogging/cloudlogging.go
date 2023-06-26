@@ -87,6 +87,10 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 
 	}
 
+	// Add trace data
+	labels["trace"] = entry.GetTrace()
+	labels["spanId"] = entry.GetSpanId()
+
 	return labels
 }
 

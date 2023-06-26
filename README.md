@@ -37,10 +37,26 @@ If you host Grafana on a GCE VM, you can also use the [Compute Engine service ac
 2. Click "Add data source"
 3. Select "Google Cloud Logging"
 4. Provide credentials in a JWT file, either by using the file selector or pasting the contents of the file.
-5. If desired, provide a regional [Cloud Logging service endpoint](https://cloud.google.com/vpc/docs/regional-service-endpoints#cloud-logging) in order to only collect logs from a specific log bucket region
-6. Click "Save & test" to test that logs can be queried from Cloud Logging.
+5. Click "Save & test" to test that logs can be queried from Cloud Logging.
 
 ![image info](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/cloud_logging_config.png?raw=true)
+
+### An alternative way to provision the data source
+
+You can define and configure the data source in YAML files as part of Grafana’s provisioning system, similar to [the Google Cloud Monitoring plugin](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/#provision-the-data-source). For more information about provisioning, and for available configuration options, refer to [Provisioning Grafana](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources).
+
+The following YAML is an example.
+
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Google Cloud Logging
+    type: googlecloud-logging-datasource
+    access: proxy
+    jsonData:
+      authenticationType: gce
+```
 
 ## Licenses
 
