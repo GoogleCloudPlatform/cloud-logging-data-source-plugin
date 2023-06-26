@@ -43,7 +43,7 @@ If you host Grafana on a GCE VM, you can also use the [Compute Engine service ac
 
 ### An alternative way to provision the data source
 
-You can define and configure the data source in YAML files as part of Grafana’s provisioning system, similar to [the Google Cloud Monitoring plugin](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/#provision-the-data-source). For more information about provisioning, and for available configuration options, refer to [Provisioning Grafana](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources).
+After the plugin is installed, you can define and configure the data source in YAML files as part of Grafana’s provisioning system, similar to [the Google Cloud Monitoring plugin](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/#provision-the-data-source). For more information about provisioning, and for available configuration options, refer to [Provisioning Grafana](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources).
 
 The following YAML is an example.
 

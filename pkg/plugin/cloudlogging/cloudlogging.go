@@ -88,8 +88,14 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 	}
 
 	// Add trace data
-	labels["trace"] = entry.GetTrace()
-	labels["spanId"] = entry.GetSpanId()
+	traceId := entry.GetTrace()
+	spanId := entry.GetSpanId()
+	if traceId != "" {
+		labels["trace"] = entry.GetTrace()
+	}
+	if spanId != "" {
+		labels["spanId"] = entry.GetSpanId()
+	}
 
 	return labels
 }
@@ -100,7 +106,7 @@ func GetLogLevel(severity ltype.LogSeverity) string {
 	case ltype.LogSeverity_EMERGENCY:
 		return "critical"
 	case ltype.LogSeverity_DEFAULT:
-		return "debug"
+		return "info"
 	// Other levels already map to supported values
 	default:
 		return strings.ToLower(severity.String())
