@@ -23,13 +23,30 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/api/monitoredres"
+	"google.golang.org/genproto/googleapis/cloud/audit"
 	ltype "google.golang.org/genproto/googleapis/logging/type"
+	"google.golang.org/protobuf/proto"
 	anypb "google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
 func TestGetLogEntryMessage(t *testing.T) {
 	t.Parallel()
+
+	auditLog, _ := proto.Marshal(&audit.AuditLog{
+		ServiceName:  "service1",
+		MethodName:   "method1",
+		ResourceName: "resource1",
+		AuthenticationInfo: &audit.AuthenticationInfo{
+			PrincipalEmail: "test@test.com",
+		},
+		AuthorizationInfo: []*audit.AuthorizationInfo{
+			{
+				Granted: true,
+			},
+		},
+	})
+
 	type expectedResult struct {
 		message string
 		err     error
@@ -59,7 +76,26 @@ func TestGetLogEntryMessage(t *testing.T) {
 			},
 		},
 		{
-			name: "Proto payload",
+			name: "Non AuditLog Proto payload",
+			entry: &loggingpb.LogEntry{
+				Payload: &loggingpb.LogEntry_ProtoPayload{
+					ProtoPayload: &anypb.Any{
+						TypeUrl: `type.googleapis.com/google.cloud.audit.NonAuditLog`,
+						Value:   []byte(`Protobuf Payload message`),
+					},
+				},
+			},
+			expected: &expectedResult{
+				message: loggingpb.LogEntry_ProtoPayload{
+					ProtoPayload: &anypb.Any{
+						TypeUrl: `type.googleapis.com/google.cloud.audit.NonAuditLog`,
+						Value:   []byte(`Protobuf Payload message`),
+					},
+				}.ProtoPayload.String(),
+			},
+		},
+		{
+			name: "Bad AuditLog Proto payload",
 			entry: &loggingpb.LogEntry{
 				Payload: &loggingpb.LogEntry_ProtoPayload{
 					ProtoPayload: &anypb.Any{
@@ -75,6 +111,21 @@ func TestGetLogEntryMessage(t *testing.T) {
 						Value:   []byte(`Protobuf Payload message`),
 					},
 				}.ProtoPayload.String(),
+				err: errors.New("error unmarshaling Any to AuditLog: proto: cannot parse invalid wire-format data"),
+			},
+		},
+		{
+			name: "AuditLog Proto payload",
+			entry: &loggingpb.LogEntry{
+				Payload: &loggingpb.LogEntry_ProtoPayload{
+					ProtoPayload: &anypb.Any{
+						TypeUrl: `type.googleapis.com/google.cloud.audit.AuditLog`,
+						Value:   auditLog,
+					},
+				},
+			},
+			expected: &expectedResult{
+				message: "{\"serviceName\":\"service1\", \"methodName\":\"method1\", \"resourceName\":\"resource1\", \"authenticationInfo\":{\"principalEmail\":\"test@test.com\"}, \"authorizationInfo\":[{\"granted\":true}]}",
 			},
 		},
 		{
@@ -139,6 +190,8 @@ func TestGetLogEntryMessage(t *testing.T) {
 
 			if tc.expected.err != nil {
 				require.ErrorContains(t, err, tc.expected.err.Error())
+			} else {
+				require.NoError(t, err)
 			}
 			require.Equal(t, tc.expected.message, message)
 		})
@@ -207,6 +260,20 @@ func TestGetLogLevel(t *testing.T) {
 }
 
 func TestGetLogLabels(t *testing.T) {
+	auditLog, _ := proto.Marshal(&audit.AuditLog{
+		ServiceName:  "service1",
+		MethodName:   "method1",
+		ResourceName: "resource1",
+		AuthenticationInfo: &audit.AuthenticationInfo{
+			PrincipalEmail: "test@test.com",
+		},
+		AuthorizationInfo: []*audit.AuthorizationInfo{
+			{
+				Granted: true,
+			},
+		},
+	})
+
 	testCases := []struct {
 		name     string
 		entry    *loggingpb.LogEntry
@@ -310,6 +377,74 @@ func TestGetLogLabels(t *testing.T) {
 				"level":                               "alert",
 				"jsonPayload.service_context.service": "some-service",
 				"jsonPayload.service_context.version": "v42",
+			},
+		},
+		{
+			name: "AuditLog Proto payload",
+			entry: &loggingpb.LogEntry{
+				InsertId: "insert-id4",
+				Labels: map[string]string{
+					"logging.googleapis.com/instrumentation_source": "agent.googleapis.com/thirdparty",
+					"LOG_BUCKET_NUM": "1",
+				},
+				Severity: ltype.LogSeverity_ALERT,
+				Payload: &loggingpb.LogEntry_ProtoPayload{
+					ProtoPayload: &anypb.Any{
+						TypeUrl: "type.googleapis.com/google.cloud.audit.AuditLog",
+						Value:   auditLog,
+					},
+				},
+				Resource: &monitoredres.MonitoredResource{
+					Labels: map[string]string{
+						"instance_id": "98765",
+					},
+					Type: "gce_instance",
+				},
+			},
+			expected: data.Labels{
+				"id": "insert-id4",
+				"labels.\"logging.googleapis.com/instrumentation_source\"": "agent.googleapis.com/thirdparty",
+				"protoPayload.@type":                             "type.googleapis.com/google.cloud.audit.AuditLog",
+				"protoPayload.serviceName":                       "service1",
+				"protoPayload.methodName":                        "method1",
+				"protoPayload.resourceName":                      "resource1",
+				"protoPayload.authenticationInfo.principalEmail": "test@test.com",
+				"protoPayload.authorizationInfo[0].granted":      "true",
+				"labels.\"LOG_BUCKET_NUM\"":                      "1",
+				"resource.labels.instance_id":                    "98765",
+				"resource.type":                                  "gce_instance",
+				"level":                                          "alert",
+			},
+		},
+		{
+			name: "Non AuditLog Proto payload",
+			entry: &loggingpb.LogEntry{
+				InsertId: "insert-id4",
+				Labels: map[string]string{
+					"logging.googleapis.com/instrumentation_source": "agent.googleapis.com/thirdparty",
+					"LOG_BUCKET_NUM": "1",
+				},
+				Severity: ltype.LogSeverity_ALERT,
+				Payload: &loggingpb.LogEntry_ProtoPayload{
+					ProtoPayload: &anypb.Any{
+						TypeUrl: "type.googleapis.com/google.cloud.audit.NotAuditLog",
+						Value:   auditLog,
+					},
+				},
+				Resource: &monitoredres.MonitoredResource{
+					Labels: map[string]string{
+						"instance_id": "98765",
+					},
+					Type: "gce_instance",
+				},
+			},
+			expected: data.Labels{
+				"id": "insert-id4",
+				"labels.\"logging.googleapis.com/instrumentation_source\"": "agent.googleapis.com/thirdparty",
+				"labels.\"LOG_BUCKET_NUM\"":                                "1",
+				"resource.labels.instance_id":                              "98765",
+				"resource.type":                                            "gce_instance",
+				"level":                                                    "alert",
 			},
 		},
 	}

@@ -44,6 +44,71 @@ describe('Google Cloud Logging Data Source', () => {
             ds.getDefaultProject().then(r => expect(r).toBe(projectId));
         });
     });
+
+    describe('filterQuery', () => {
+        it('returns true if hide is not set', () => {
+            const ds = makeDataSource();
+            const query = {
+                refId: '1',
+                projectId: '1',
+            };
+            expect(ds.filterQuery(query)).toBe(true);
+        });
+        it('returns true if hide is set to false', () => {
+            const ds = makeDataSource();
+            const query = {
+                refId: '1',
+                projectId: '1',
+                hide: false
+            };
+            expect(ds.filterQuery(query)).toBe(true);
+        });
+        it('returns false if hide is set to true', () => {
+            const ds = makeDataSource();
+            const query = {
+                refId: '1',
+                projectId: '1',
+                hide: true
+            };
+            expect(ds.filterQuery(query)).toBe(false);
+        });
+    });
+
+    describe('modifyQuery', () => {
+        it('removes [x] from QueryFixAction ADD_FILTER key', () => {
+            const ds = makeDataSource();
+            const query = {
+                refId: '1',
+                projectId: '1',
+                queryText: `key1="value1"`
+            };
+            const action = {
+                type: "ADD_FILTER",
+                options: {key: "key2.key3[2].key4", value: "value4"},
+                query: `key1="value1"`
+            }
+            expect(ds.modifyQuery(query, action).queryText).toEqual(`key1="value1"
+key2.key3.key4="value4"`);
+        });
+    });
+
+    describe('modifyQuery', () => {
+        it('removes [x] from QueryFixAction ADD_FILTER_OUT key', () => {
+            const ds = makeDataSource();
+            const query = {
+                refId: '1',
+                projectId: '1',
+                queryText: `key1="value1"`
+            };
+            const action = {
+                type: "ADD_FILTER_OUT",
+                options: {key: "key2.key3[2].key4", value: "value4"},
+                query: `key1="value1"`
+            }
+            expect(ds.modifyQuery(query, action).queryText).toEqual(`key1="value1"
+key2.key3.key4!="value4"`);
+        });
+    });
 });
 
 const makeDataSource = () => {

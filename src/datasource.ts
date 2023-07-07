@@ -109,7 +109,7 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
             }
             queryText += `\nseverity="${escapeLabelValue(level)}"`;
           } else {
-            queryText += `\n${action.options.key}="${escapeLabelValue(action.options.value)}"`;
+            queryText += `\n${removeArrayIndices(action.options.key)}="${escapeLabelValue(action.options.value)}"`;
           }
         }
         break;
@@ -127,7 +127,7 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
             }
             queryText += `\nseverity!="${escapeLabelValue(level)}"`;
           } else {
-            queryText += `\n${action.options.key}!="${escapeLabelValue(action.options.value)}"`;
+            queryText += `\n${removeArrayIndices(action.options.key)}!="${escapeLabelValue(action.options.value)}"`;
           }
         }
         break;
@@ -147,4 +147,9 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
 // - "  ... the double-quote character
 function escapeLabelValue(labelValue: string): string {
   return labelValue.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
+}
+
+// remove any [x] from the string
+function removeArrayIndices(labelValue: string): string {
+  return labelValue.replace(/\[\d+\]/g, '');
 }

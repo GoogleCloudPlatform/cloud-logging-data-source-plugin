@@ -286,7 +286,9 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 		body, err := cloudlogging.GetLogEntryMessage(logs[i])
 		if err != nil {
 			log.DefaultLogger.Warn("failed getting log message", "error", err)
-			continue
+			if body == "" {
+				continue
+			}
 		}
 
 		labels := cloudlogging.GetLogLabels(logs[i])
