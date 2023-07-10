@@ -5,9 +5,7 @@ go 1.16
 require (
 	cloud.google.com/go/logging v1.7.0
 	github.com/fatih/color v1.15.0 // indirect
-	github.com/golang/protobuf v1.5.3 // indirect
-	github.com/google/flatbuffers v23.3.3+incompatible // indirect
-	github.com/grafana/grafana-google-sdk-go v0.1.0
+	github.com/grafana/grafana-google-sdk-go v0.2.1
 	github.com/grafana/grafana-plugin-sdk-go v0.156.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0 // indirect
 	github.com/hashicorp/go-hclog v1.4.0 // indirect
@@ -24,5 +22,6 @@ require (
 	github.com/stretchr/testify v1.8.3
 	google.golang.org/api v0.126.0
 	google.golang.org/genproto v0.0.0-20230706204954-ccb25ca9f130
+	google.golang.org/genproto/googleapis/api v0.0.0-20230629202037-9506855d4529
 	google.golang.org/protobuf v1.31.0
 )
