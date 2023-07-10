@@ -120,7 +120,9 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 	traceId := entry.GetTrace()
 	spanId := entry.GetSpanId()
 	if traceId != "" {
-		labels["trace"] = entry.GetTrace()
+		trace := entry.GetTrace()
+		labels["trace"] = trace
+		labels["traceId"] = strings.Split(trace, "/")[len(strings.Split(trace, "/"))-1]
 	}
 	if spanId != "" {
 		labels["spanId"] = entry.GetSpanId()
