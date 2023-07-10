@@ -41,6 +41,8 @@ func GetLogEntryMessage(entry *loggingpb.LogEntry) (string, error) {
 		return t.TextPayload, nil
 	case *loggingpb.LogEntry_ProtoPayload:
 		return t.ProtoPayload.String(), nil
+	case nil:
+		return "", fmt.Errorf("empty payload %T", t)
 	default:
 		return "", fmt.Errorf("unknown payload type %T", t)
 	}
@@ -73,6 +75,8 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 				fieldToLabels(labels, fmt.Sprintf("jsonPayload.%s", k), v)
 			}
 		}
+	case *loggingpb.LogEntry_TextPayload:
+		labels["textPayload"] = t.TextPayload
 	case *loggingpb.LogEntry_ProtoPayload:
 		typeUrl := t.ProtoPayload.TypeUrl
 		if strings.HasSuffix(typeUrl, "AuditLog") {
