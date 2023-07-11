@@ -285,8 +285,9 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 	for i := 0; i < len(logs); i++ {
 		body, err := cloudlogging.GetLogEntryMessage(logs[i])
 		if err != nil {
-			log.DefaultLogger.Warn("failed getting log message", "error", err)
-			continue
+			// some log messages might not have a payload
+			// log a warning here but continue
+			log.DefaultLogger.Warn("failed getting log message", "warning", err)
 		}
 
 		labels := cloudlogging.GetLogLabels(logs[i])

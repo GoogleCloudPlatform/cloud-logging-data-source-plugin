@@ -20,7 +20,10 @@ import (
 	"strings"
 
 	"cloud.google.com/go/logging/apiv2/loggingpb"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
+	rlpb "google.golang.org/genproto/googleapis/appengine/logging/v1"
+	alpb "google.golang.org/genproto/googleapis/cloud/audit"
 	ltype "google.golang.org/genproto/googleapis/logging/type"
 	"google.golang.org/protobuf/types/known/structpb"
 )
@@ -38,6 +41,8 @@ func GetLogEntryMessage(entry *loggingpb.LogEntry) (string, error) {
 		return t.TextPayload, nil
 	case *loggingpb.LogEntry_ProtoPayload:
 		return t.ProtoPayload.String(), nil
+	case nil:
+		return "", fmt.Errorf("empty payload %T", t)
 	default:
 		return "", fmt.Errorf("unknown payload type %T", t)
 	}
@@ -70,6 +75,35 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 				fieldToLabels(labels, fmt.Sprintf("jsonPayload.%s", k), v)
 			}
 		}
+	case *loggingpb.LogEntry_TextPayload:
+		labels["textPayload"] = t.TextPayload
+	case *loggingpb.LogEntry_ProtoPayload:
+		typeUrl := t.ProtoPayload.TypeUrl
+		if strings.HasSuffix(typeUrl, "AuditLog") {
+			var a alpb.AuditLog
+			if err := t.ProtoPayload.UnmarshalTo(&a); err != nil {
+				log.DefaultLogger.Error("Could not get AuditLog payload out of LogEntry: %v", err)
+			} else {
+				byteArr, _ := json.Marshal(a)
+				var inInterface map[string]*structpb.Value
+				json.Unmarshal(byteArr, &inInterface)
+				for k, v := range inInterface {
+					fieldToLabels(labels, fmt.Sprintf("protoPayload.%s", k), v)
+				}
+			}
+		} else if strings.HasSuffix(typeUrl, "RequestLog") {
+			var r rlpb.RequestLog
+			if err := t.ProtoPayload.UnmarshalTo(&r); err != nil {
+				log.DefaultLogger.Error("Could not get RequestLog payload out of LogEntry: %v", err)
+			} else {
+				byteArr, _ := json.Marshal(r)
+				var inInterface map[string]*structpb.Value
+				json.Unmarshal(byteArr, &inInterface)
+				for k, v := range inInterface {
+					fieldToLabels(labels, fmt.Sprintf("protoPayload.%s", k), v)
+				}
+			}
+		}
 	}
 	// If httpRequest exists in the log entry, include it too
 	httpRequest := entry.GetHttpRequest()
@@ -84,7 +118,18 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 				labels[fmt.Sprintf("httpRequest.%s", k)] = fmt.Sprintf("%v", v)
 			}
 		}
+	}
 
+	// Add trace data
+	traceId := entry.GetTrace()
+	spanId := entry.GetSpanId()
+	if traceId != "" {
+		trace := entry.GetTrace()
+		labels["trace"] = trace
+		labels["traceId"] = strings.Split(trace, "/")[len(strings.Split(trace, "/"))-1]
+	}
+	if spanId != "" {
+		labels["spanId"] = entry.GetSpanId()
 	}
 
 	return labels
@@ -96,7 +141,7 @@ func GetLogLevel(severity ltype.LogSeverity) string {
 	case ltype.LogSeverity_EMERGENCY:
 		return "critical"
 	case ltype.LogSeverity_DEFAULT:
-		return "debug"
+		return "info"
 	// Other levels already map to supported values
 	default:
 		return strings.ToLower(severity.String())

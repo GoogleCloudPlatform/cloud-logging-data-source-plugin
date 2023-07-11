@@ -28,6 +28,12 @@ import (
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
+	// Currently, LogEntry.ProtoPayload only supports two types
+	// https://pkg.go.dev/cloud.google.com/go/logging/apiv2/loggingpb#LogEntry_ProtoPayload
+	// Adding the _ import to get that proto message structure registered with the unmarshaller
+	_ "google.golang.org/genproto/googleapis/appengine/logging/v1"
+	_ "google.golang.org/genproto/googleapis/cloud/audit"
+
 	"cloud.google.com/go/logging/apiv2/loggingpb"
 )
 

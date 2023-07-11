@@ -17,6 +17,7 @@
 import { DataSourceInstanceSettings, QueryFixAction, ScopedVars } from '@grafana/data';
 import { DataSourceWithBackend, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 import { CloudLoggingOptions, Query } from './types';
+import { CloudLoggingVariableSupport } from './variables';
 
 export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions> {
   authenticationType: string;
@@ -27,6 +28,7 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   ) {
     super(instanceSettings);
     this.authenticationType = instanceSettings.jsonData.authenticationType || 'jwt';
+    this.variables = new CloudLoggingVariableSupport(this);
   }
 
   /**
@@ -89,6 +91,9 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     return {
       ...query,
       queryText: this.templateSrv.replace(query.queryText, scopedVars),
+      projectId: this.templateSrv.replace(query.projectId, scopedVars),
+      bucketId: this.templateSrv.replace(query.bucketId, scopedVars),
+      viewId: this.templateSrv.replace(query.viewId, scopedVars),
     };
   }
 
