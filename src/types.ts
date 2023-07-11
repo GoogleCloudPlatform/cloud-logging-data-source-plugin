@@ -51,3 +51,34 @@ export const defaultQuery: Partial<Query> = {
  * These are options configured for each DataSource instance.
  */
 export type CloudLoggingOptions = DataSourceOptionsExt;
+
+/**
+ * Supported types for template variables
+ */
+export interface CloudLoggingVariableQuery extends DataQuery {
+  selectedQueryType: string;
+  projectId: string;
+  bucketId?: string;
+}
+
+/**
+ * Enum for logging scopes
+ */
+export enum LogFindQueryScopes {
+  Projects = 'projects',
+  Buckets = 'buckets',
+  Views = 'views',
+}
+
+/**
+ * Scope data for template variables
+ */
+export interface VariableScopeData {
+  selectedQueryType: string;
+  projects: SelectableValue[];
+  buckets: SelectableValue[];
+  bucketId: string;
+  viewId: string;
+  projectId: string;
+  loading: boolean;
+}

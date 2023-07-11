@@ -58,6 +58,13 @@ datasources:
       authenticationType: gce
 ```
 
+### Supported variables
+The plugin currently supports variables for logging scopes. For example, you can define a project variable and switch between projects. The following screenshot shows an example using project, bucket, and view.
+
+![template variables](./src/img/template_vars.png?raw=true)
+
+Below is an example of defining a variable for log views.
+![define a variable](./src/img/template_query_vars.png?raw=true)
 ## Licenses
 
 Cloud Logging Logo (`src/img/logo.svg`) is from Google Cloud's [Official icons and sample diagrams](https://cloud.google.com/icons)

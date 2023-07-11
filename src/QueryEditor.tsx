@@ -72,7 +72,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
           })));
         });
       });
-    } else {
+    } else if (!query.projectId.startsWith('$')) {
       datasource.getLogBuckets(query.projectId).then(res => {
         setBuckets(res.map(bucket => ({
           label: bucket,
@@ -84,12 +84,14 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
 
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
-    datasource.getLogBucketViews(query.projectId, `${query.bucketId}`).then(res => {
-      setViews(res.map(view => ({
-        label: view,
-        value: view,
-      })));
-    });
+    if (query.bucketId && !query.bucketId.startsWith('$')) {
+      datasource.getLogBucketViews(query.projectId, `${query.bucketId}`).then(res => {
+        setViews(res.map(view => ({
+          label: view,
+          value: view,
+        })));
+      });
+    }
   }, [datasource, query]);
 
   /**
@@ -123,8 +125,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
             onChange={e => onChange({
               ...query,
               projectId: e.value!,
-              bucketId: "",
-              viewId: "",
+              bucketId: query.bucketId && query.bucketId.startsWith('$') ? query.bucketId : "",
+              viewId: query.viewId && query.viewId.startsWith('$') ? query.viewId : "",
             })}
             options={projects}
             value={query.projectId}
@@ -140,7 +142,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
             onChange={e => onChange({
               ...query,
               bucketId: e.value!,
-              viewId: "",
+              viewId: query.viewId && query.viewId.startsWith('$') ? query.viewId : "",
             })}
             options={buckets}
             value={query.bucketId}
