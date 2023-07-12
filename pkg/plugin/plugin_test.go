@@ -123,6 +123,7 @@ func TestQueryData_SingleLog(t *testing.T) {
 	// insertID and receivedAt are hardcoded to match the expected response
 	insertID := "b6f39be2-b298-44da-9001-1f04e5756fa0"
 	receivedAt := timestamppb.New(time.UnixMilli(1660920349373))
+	trace := "projects/xxx/traces/c0e331eab1515bbcd1b8306029902ff7"
 
 	logEntry := loggingpb.LogEntry{
 		LogName: "organizations/1234567890/logs/cloudresourcemanager.googleapis.com%2Factivity",
@@ -134,6 +135,7 @@ func TestQueryData_SingleLog(t *testing.T) {
 		ReceiveTimestamp: receivedAt,
 		Severity:         ltype.LogSeverity_INFO,
 		InsertId:         insertID,
+		Trace:            trace,
 		Labels: map[string]string{
 			"instance_id":  "unique",
 			"custom_label": "custom_value",
@@ -184,7 +186,7 @@ func TestQueryData_SingleLog(t *testing.T) {
 	require.Len(t, frame.Fields, 2)
 	require.Equal(t, data.VisTypeLogs, string(frame.Meta.PreferredVisualization))
 
-	expectedFrame := []byte(`{"schema":{"name":"b6f39be2-b298-44da-9001-1f04e5756fa0","meta":{"typeVersion":[0,0],"preferredVisualisationType":"logs"},"fields":[{"name":"time","type":"time","typeInfo":{"frame":"time.Time"}},{"name":"content","type":"string","typeInfo":{"frame":"string"},"labels":{"id":"b6f39be2-b298-44da-9001-1f04e5756fa0","labels.\"custom_label\"":"custom_value","labels.\"instance_id\"":"unique","level":"info","resource.type":"gce_instance"}}]},"data":{"values":[[1660920349373],["Full log message from this GCE instance"]]}}`)
+	expectedFrame := []byte(`{"schema":{"name":"b6f39be2-b298-44da-9001-1f04e5756fa0","meta":{"typeVersion":[0,0],"preferredVisualisationType":"logs"},"fields":[{"name":"time","type":"time","typeInfo":{"frame":"time.Time"}},{"name":"content","type":"string","typeInfo":{"frame":"string"},"labels":{"id":"b6f39be2-b298-44da-9001-1f04e5756fa0","labels.\"custom_label\"":"custom_value","labels.\"instance_id\"":"unique","level":"info","resource.type":"gce_instance","textPayload":"Full log message from this GCE instance","trace":"projects/xxx/traces/c0e331eab1515bbcd1b8306029902ff7","traceId":"c0e331eab1515bbcd1b8306029902ff7"}}]},"data":{"values":[[1660920349373],["Full log message from this GCE instance"]]}}`)
 
 	serializedFrame, err := frame.MarshalJSON()
 	require.NoError(t, err)
