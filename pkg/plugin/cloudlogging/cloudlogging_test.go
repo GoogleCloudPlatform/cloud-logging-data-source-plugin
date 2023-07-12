@@ -44,7 +44,7 @@ func TestGetLogEntryMessage(t *testing.T) {
 			name:  "Text payload",
 			entry: &loggingpb.LogEntry{},
 			expected: &expectedResult{
-				err: errors.New("unknown payload type"),
+				err: errors.New("empty payload <nil>"),
 			},
 		},
 		{
@@ -195,7 +195,7 @@ func TestGetLogLevel(t *testing.T) {
 		{
 			name:            ltype.LogSeverity_DEFAULT.String(),
 			gcpSeverity:     ltype.LogSeverity_DEFAULT,
-			grafanaSeverity: "debug",
+			grafanaSeverity: "info",
 		},
 	}
 
@@ -219,7 +219,7 @@ func TestGetLogLabels(t *testing.T) {
 			},
 			expected: data.Labels{
 				"id":    "insert-id",
-				"level": "debug",
+				"level": "info",
 			},
 		},
 		{
@@ -237,7 +237,7 @@ func TestGetLogLabels(t *testing.T) {
 				"id":                          "insert-id",
 				"resource.labels.instance_id": "123456",
 				"resource.type":               "gce_instance",
-				"level":                       "debug",
+				"level":                       "info",
 			},
 		},
 		{
@@ -261,7 +261,7 @@ func TestGetLogLabels(t *testing.T) {
 				"labels.\"LOG_BUCKET_NUM\"":   "1",
 				"resource.labels.instance_id": "98765",
 				"resource.type":               "cloudsql_database",
-				"level":                       "debug",
+				"level":                       "info",
 			},
 		},
 		{
