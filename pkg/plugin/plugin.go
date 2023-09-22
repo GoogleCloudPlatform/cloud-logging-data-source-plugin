@@ -48,10 +48,12 @@ const (
 
 // config is the fields parsed from the front end
 type config struct {
-	AuthType       string `json:"authenticationType"`
-	ClientEmail    string `json:"clientEmail"`
-	DefaultProject string `json:"defaultProject"`
-	TokenURI       string `json:"tokenUri"`
+	AuthType                    string `json:"authenticationType"`
+	ClientEmail                 string `json:"clientEmail"`
+	DefaultProject              string `json:"defaultProject"`
+	TokenURI                    string `json:"tokenUri"`
+	ServiceAccountToImpersonate string `json:"serviceAccountToImpersonate"`
+	UsingImpersonation          bool   `json:"usingImpersonation"`
 }
 
 // toServiceAccountJSON creates the serviceAccountJSON bytes from the config fields
@@ -100,9 +102,17 @@ func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (ins
 			return nil, fmt.Errorf("create credentials: %w", err)
 		}
 
-		client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount)
+		if conf.UsingImpersonation {
+			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), serviceAccount, conf.ServiceAccountToImpersonate)
+		} else {
+			client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount)
+		}
 	} else {
-		client, client_err = cloudlogging.NewClientWithGCE(context.TODO())
+		if conf.UsingImpersonation {
+			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), nil, conf.ServiceAccountToImpersonate)
+		} else {
+			client, client_err = cloudlogging.NewClientWithGCE(context.TODO())
+		}
 	}
 	if client_err != nil {
 		return nil, client_err
