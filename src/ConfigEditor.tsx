@@ -25,6 +25,7 @@ export type Props = DataSourcePluginOptionsEditorProps<CloudLoggingOptions, Data
 export class ConfigEditor extends PureComponent<Props> {
     state = {
         isChecked: this.props.options.jsonData.usingImpersonation || false,
+        sa: this.props.options.jsonData.serviceAccountToImpersonate || '',
     };
     handleClick = () => {
         this.props.options.jsonData.usingImpersonation = !this.state.isChecked;
@@ -43,9 +44,10 @@ export class ConfigEditor extends PureComponent<Props> {
                         <input
                             size={60}
                             id="serviceAccount"
-                            value={this.props.options.jsonData.serviceAccountToImpersonate}
+                            value={this.state.sa}
                             onChange={(e) => {
-                                this.props.options.jsonData.serviceAccountToImpersonate = e.target.value
+                                this.setState({ sa: e.target.value },
+                                    () => { this.props.options.jsonData.serviceAccountToImpersonate = this.state.sa; });
                             }}
                         />
                     </div>
