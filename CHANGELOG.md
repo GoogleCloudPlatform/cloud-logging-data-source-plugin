@@ -1,4 +1,7 @@
 # Changelog
+## 1.4.0 (2023-09-26)
+* Support service account impersonation
+* Update README for alerting
 
 ## 1.3.0 (2023-07-12)
 

@@ -70,6 +70,10 @@ The plugin currently supports variables for logging scopes. For example, you can
 
 Below is an example of defining a variable for log views.
 ![define a variable](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/template_query_vars.png?raw=true)
+
+### Alerting
+[Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/fundamentals/data-source-alerting/) is not directly supported due to how [Logging Query Language](https://cloud.google.com/logging/docs/view/logging-query-language) works on Google Cloud. If you need to create alerts based on logs, consider using [Log-based metrics](https://cloud.google.com/logging/docs/logs-based-metrics) and a [Cloud Monitoring data source](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/).
+
 ## Licenses
 
 Cloud Logging Logo (`src/img/logo.svg`) is from Google Cloud's [Official icons and sample diagrams](https://cloud.google.com/icons)
