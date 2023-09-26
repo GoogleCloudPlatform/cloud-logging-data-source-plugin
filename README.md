@@ -32,6 +32,11 @@ If you want to access logs in multiple cloud projects, you need to ensure the se
 
 If you host Grafana on a GCE VM, you can also use the [Compute Engine service account](https://cloud.google.com/compute/docs/access/service-accounts#serviceaccount). You need to make sure the service account has sufficient permissions to access the scopes and logs in all projects.
 
+### Service account impersonation
+You can also configure the plugin to use [service account impersonation](https://cloud.google.com/iam/docs/service-account-impersonation).
+You need to ensure the service account used by this plugin has the `iam.serviceAccounts.getAccessToken` permission. This permission is in roles like the [Service Account Token Creator role](https://cloud.google.com/iam/docs/understanding-roles#iam.serviceAccountTokenCreator) (roles/iam.serviceAccountTokenCreator). Also, the service account impersonated
+by this plugin needs logging read and project list permissions.
+
 ### Grafana Configuration
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"
@@ -65,6 +70,10 @@ The plugin currently supports variables for logging scopes. For example, you can
 
 Below is an example of defining a variable for log views.
 ![define a variable](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/template_query_vars.png?raw=true)
+
+### Alerting
+[Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/fundamentals/data-source-alerting/) is not directly supported due to how [Logging Query Language](https://cloud.google.com/logging/docs/view/logging-query-language) works on Google Cloud. If you need to create alerts based on logs, consider using [Log-based metrics](https://cloud.google.com/logging/docs/logs-based-metrics) and a [Cloud Monitoring data source](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/).
+
 ## Licenses
 
 Cloud Logging Logo (`src/img/logo.svg`) is from Google Cloud's [Official icons and sample diagrams](https://cloud.google.com/icons)

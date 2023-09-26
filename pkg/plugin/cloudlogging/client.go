@@ -24,7 +24,9 @@ import (
 
 	logging "cloud.google.com/go/logging/apiv2"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
+	"golang.org/x/oauth2"
 	resourcemanager "google.golang.org/api/cloudresourcemanager/v1"
+	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
 
@@ -101,6 +103,47 @@ func NewClientWithGCE(ctx context.Context) (*Client, error) {
 		return nil, err
 	}
 	configClient, err := logging.NewConfigClient(ctx,
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		lClient:      client,
+		rClient:      rClient.Projects,
+		configClient: configClient,
+	}, nil
+}
+
+// NewClient creates a new Clients using service account impersonation
+func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersonateSA string) (*Client, error) {
+	var ts oauth2.TokenSource
+	var err error
+	if jsonCreds == nil {
+		ts, err = impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
+			TargetPrincipal: impersonateSA,
+			Scopes:          []string{"https://www.googleapis.com/auth/cloud-platform.read-only"},
+		})
+	} else {
+		ts, err = impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
+			TargetPrincipal: impersonateSA,
+			Scopes:          []string{"https://www.googleapis.com/auth/cloud-platform.read-only"},
+		}, option.WithCredentialsJSON(jsonCreds))
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	client, err := logging.NewClient(ctx, option.WithTokenSource(ts),
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	rClient, err := resourcemanager.NewService(ctx, option.WithTokenSource(ts),
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	configClient, err := logging.NewConfigClient(ctx, option.WithTokenSource(ts),
 		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
