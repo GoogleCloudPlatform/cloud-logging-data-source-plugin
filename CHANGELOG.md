@@ -1,5 +1,5 @@
 # Changelog
-## 1.4.0 (2023-09-26)
+## 1.4.1 (2024-03-22)
 * Fix an encoding issue for parentheses
 * Add annotation support
 * Update a few dependencies
