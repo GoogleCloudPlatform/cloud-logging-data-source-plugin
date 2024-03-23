@@ -1,5 +1,10 @@
 # Changelog
 ## 1.4.0 (2023-09-26)
+* Fix an encoding issue for parentheses
+* Add annotation support
+* Update a few dependencies
+
+## 1.4.0 (2023-09-26)
 * Support service account impersonation
 * Update README for alerting
 

@@ -21,6 +21,7 @@ import { CloudLoggingVariableSupport } from './variables';
 
 export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions> {
   authenticationType: string;
+  annotations = {};
 
   constructor(
     private instanceSettings: DataSourceInstanceSettings<CloudLoggingOptions>,
