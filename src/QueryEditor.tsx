@@ -102,7 +102,13 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       return undefined;
     }
 
-    const queryText = `query=${encodeURIComponent(query.queryText)}`;
+    const encodedText = encodeURIComponent(query.queryText).replace(/[!'()*]/g, function(c) {
+        if (c === '(' || c === ')') {
+          return '%25' + c.charCodeAt(0).toString(16);
+        }
+        return '%' + c.charCodeAt(0).toString(16);
+    });
+    const queryText = `query=${encodedText}`;
     // If range is somehow undefined, don't add timeRange to the URI
     const timeRange = range !== undefined ?
       `timeRange=${range?.from?.toISOString()}%2F${range?.to?.toISOString()}`

@@ -5,6 +5,7 @@
   "category": "logging",
   "id": "googlecloud-logging-datasource",
   "metrics": true,
+  "annotations": true,
   "backend": true,
   "logs": true,
   "executable": "gpx_gcp-logging",
