@@ -84,13 +84,14 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
 
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
-    if (query.bucketId && !query.bucketId.startsWith('$')) {
-      datasource.getLogBucketViews(query.projectId, `${query.bucketId}`).then(res => {
-        setViews(res.map(view => ({
-          label: view,
-          value: view,
-        })));
-      });
+    const bid = query.bucketId ? query.bucketId : "global/buckets/_Default";
+    if (!bid.startsWith('$')) {
+        datasource.getLogBucketViews(query.projectId, `${bid}`).then(res => {
+            setViews(res.map(view => ({
+              label: view,
+              value: view,
+            })));
+        });
     }
   }, [datasource, query]);
 
@@ -102,7 +103,23 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       return undefined;
     }
 
-    const encodedText = encodeURIComponent(query.queryText).replace(/[!'()*]/g, function(c) {
+    let storageScope = "";
+    if (query.projectId) {
+        storageScope = `;storageScope=storage,projects/${query.projectId}`;
+    
+        if (query.bucketId) {
+            storageScope += `/locations/${query.bucketId}`;
+        } else {
+            storageScope += `/locations/global/buckets/_Default`;
+        }
+        if (query.viewId) {
+            storageScope += `/views/${query.viewId}`;
+        } else {
+            storageScope += `/views/_AllLogs`;
+        }
+    }
+
+    const encodedText = encodeURIComponent(`${query.queryText}${storageScope}`).replace(/[!'()*]/g, function(c) {
         if (c === '(' || c === ')') {
           return '%25' + c.charCodeAt(0).toString(16);
         }

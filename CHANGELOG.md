@@ -1,6 +1,7 @@
 # Changelog
 ## 1.4.1 (2024-03-22)
 * Fix an encoding issue for parentheses
+* Fix cloud logging link scope issue
 * Add annotation support
 * Update a few dependencies
 
