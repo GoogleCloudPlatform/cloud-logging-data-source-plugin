@@ -55,6 +55,7 @@ type API interface {
 	ListProjectBucketViews(ctx context.Context, projectId string, bucketId string) ([]string, error)
 	// Close closes the underlying connection to the GCP API
 	Close() error
+	SetPassthroughHeaders(ctx context.Context, headers map[string]string) error
 }
 
 // Client wraps a GCP logging client to fetch logs, a resourcemanager client
@@ -63,6 +64,28 @@ type Client struct {
 	lClient      *logging.Client
 	rClient      *resourcemanager.ProjectsService
 	configClient *logging.ConfigClient
+}
+
+// NewClient creates a new Client using jsonCreds for authentication
+func NewClientWithPassthrough(ctx context.Context) (*Client, error) {
+	client, err := logging.NewClient(ctx, option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	rClient, err := resourcemanager.NewService(ctx, option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+
+	configClient, err := logging.NewConfigClient(ctx, option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		lClient:      client,
+		rClient:      rClient.Projects,
+		configClient: configClient,
+	}, nil
 }
 
 // NewClient creates a new Client using jsonCreds for authentication
@@ -159,6 +182,13 @@ func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersona
 func (c *Client) Close() error {
 	c.configClient.Close()
 	return c.lClient.Close()
+}
+
+func (c *Client) SetPassthroughHeaders(ctx context.Context, headers map[string]string) error {
+	authHeader := headers["Authorization"]
+	token := strings.TrimPrefix(authHeader, "Bearer ")
+	c.lClient, _ = logging.NewClient(ctx, option.WithUserAgent("googlecloud-logging-datasource"), option.WithTokenSource(oauth2.StaticTokenSource(&oauth2.Token{AccessToken: token})))
+	return nil
 }
 
 // Query is the information from a Grafana query needed to query GCP for logs

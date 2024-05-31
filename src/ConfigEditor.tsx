@@ -25,8 +25,12 @@ export type Props = DataSourcePluginOptionsEditorProps<CloudLoggingOptions, Data
 export class ConfigEditor extends PureComponent<Props> {
     state = {
         isChecked: this.props.options.jsonData.usingImpersonation || false,
+        isPassthrough: this.props.options.jsonData.oauthPassthrough || false,
         sa: this.props.options.jsonData.serviceAccountToImpersonate || '',
     };
+    updatePassthough = () => {
+        this.props.options.jsonData.oauthPassthrough = !this.state.isPassthrough;
+    }
     handleClick = () => {
         this.props.options.jsonData.usingImpersonation = !this.state.isChecked;
         this.setState({
@@ -37,6 +41,9 @@ export class ConfigEditor extends PureComponent<Props> {
         return (
             <>
                 <ConnectionConfig {...this.props}></ConnectionConfig>
+                <div>
+                    <input type="checkbox" onChange={this.updatePassthough} checked={this.state.isPassthrough} /> Check this to pass your OAuth token to the Cloud Logging API.
+                </div>
                 <div>
                     <input type="checkbox" onChange={this.handleClick} checked={this.state.isChecked} /> To impersonate an existing Google Cloud service account.
                     <div hidden={!this.state.isChecked}>

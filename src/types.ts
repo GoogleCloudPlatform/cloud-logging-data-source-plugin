@@ -29,6 +29,7 @@ export interface DataSourceOptionsExt extends DataSourceOptions {
     gceDefaultProject?: string;
     serviceAccountToImpersonate?: string;
     usingImpersonation?: boolean;
+    oauthPassthrough?: boolean;
 }
 
 /**

@@ -31,6 +31,10 @@ type API struct {
 	mock.Mock
 }
 
+func (_m *API) SetPassthroughHeaders(ctx context.Context, headers map[string]string) error {
+	return nil
+}
+
 // Close provides a mock function with given fields:
 func (_m *API) Close() error {
 	ret := _m.Called()
