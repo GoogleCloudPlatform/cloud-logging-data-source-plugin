@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -55,6 +56,7 @@ type config struct {
 	TokenURI                    string `json:"tokenUri"`
 	ServiceAccountToImpersonate string `json:"serviceAccountToImpersonate"`
 	UsingImpersonation          bool   `json:"usingImpersonation"`
+	OauthPassthrough            bool   `json:"oauthPassthrough"`
 }
 
 // toServiceAccountJSON creates the serviceAccountJSON bytes from the config fields
@@ -92,7 +94,8 @@ func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (ins
 	var client_err error
 	var client *cloudlogging.Client
 
-	if conf.AuthType == oauthpassthroughAuthentication {
+	log.DefaultLogger.Info("oauthPassthrough: " + strconv.FormatBool(conf.OauthPassthrough))
+	if conf.OauthPassthrough {
 		client, client_err = cloudlogging.NewClientWithPassthrough(context.TODO())
 	} else if conf.AuthType == jwtAuthentication {
 		// TODO: Add support for extracting token from Grafana to pass on
@@ -333,7 +336,7 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, requestHeaders map[s
 // datasource configuration page which allows users to verify that
 // a datasource is working as expected.
 func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
-	// log.DefaultLogger.Info("CheckHealth called")
+	log.DefaultLogger.Warn("CheckHealth called")
 
 	var status = backend.HealthStatusOk
 	settings := req.PluginContext.DataSourceInstanceSettings
@@ -349,6 +352,9 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 			return nil, fmt.Errorf("failed to get GCE default project: %w", err)
 		}
 		conf.DefaultProject = proj
+	}
+	if d.passthrough {
+		d.client.SetPassthroughHeaders(ctx, req.Headers)
 	}
 	if err := d.client.TestConnection(ctx, conf.DefaultProject); err != nil {
 		return &backend.CheckHealthResult{

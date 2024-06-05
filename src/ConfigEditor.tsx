@@ -30,6 +30,9 @@ export class ConfigEditor extends PureComponent<Props> {
     };
     updatePassthough = () => {
         this.props.options.jsonData.oauthPassthrough = !this.state.isPassthrough;
+        this.setState({
+            isPassthrough: !this.state.isPassthrough,
+        })
     }
     handleClick = () => {
         this.props.options.jsonData.usingImpersonation = !this.state.isChecked;
