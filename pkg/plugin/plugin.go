@@ -78,7 +78,7 @@ type serviceAccountJSON struct {
 }
 
 // NewCloudLoggingDatasource creates a new datasource instance.
-func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	var conf config
 	if err := json.Unmarshal(settings.JSONData, &conf); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
@@ -103,15 +103,15 @@ func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (ins
 		}
 
 		if conf.UsingImpersonation {
-			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), serviceAccount, conf.ServiceAccountToImpersonate)
+			client, client_err = cloudlogging.NewClientWithImpersonation(ctx, serviceAccount, conf.ServiceAccountToImpersonate)
 		} else {
-			client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount)
+			client, client_err = cloudlogging.NewClient(ctx, serviceAccount)
 		}
 	} else {
 		if conf.UsingImpersonation {
-			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), nil, conf.ServiceAccountToImpersonate)
+			client, client_err = cloudlogging.NewClientWithImpersonation(ctx, nil, conf.ServiceAccountToImpersonate)
 		} else {
-			client, client_err = cloudlogging.NewClientWithGCE(context.TODO())
+			client, client_err = cloudlogging.NewClientWithGCE(ctx)
 		}
 	}
 	if client_err != nil {
