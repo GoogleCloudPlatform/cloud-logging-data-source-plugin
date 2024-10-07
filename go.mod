@@ -14,6 +14,7 @@ require (
 	google.golang.org/protobuf v1.34.2
 )
 
+
 require (
 	cloud.google.com/go v0.115.1 // indirect
 	cloud.google.com/go/auth v0.9.5 // indirect
