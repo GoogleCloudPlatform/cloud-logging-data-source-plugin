@@ -81,7 +81,7 @@ jobs:
         run: if [ "v${{ steps.metadata.outputs.plugin-version }}" != "${{ steps.metadata.outputs.github-tag }}" ]; then printf "\033[0;31mPlugin version doesn't match tag name.\033[0m\n"; echo v${{ steps.metadata.outputs.plugin-version }}  ${{ steps.metadata.outputs.github-tag }}; exit 1; fi
       
       - name: Sign plugin
-        run: npx @grafana/sign-plugin@latest
+        run: npx @grafana/sign-plugin@2.0.2
         env:
           GRAFANA_API_KEY: ${{ secrets.GRAFANA_API_KEY }} # Requires a Grafana API key from Grafana.com.
           
