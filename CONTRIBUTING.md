@@ -34,7 +34,7 @@ Download this plugin to the machine Grafana is running on, either using `git clo
 If you download the source, you need to build the plugin. Make sure you have all the prerequisites installed and configured:
 
 - Grafana 9.0
-- Go 1.16+
+- Go 1.22+
 - Mage
 - NodeJS
 - yarn

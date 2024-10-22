@@ -1,4 +1,7 @@
 # Changelog
+## 1.4.2 (2024-10-22)
+* Minor release to update the environment: Golang 1.22, Node 19 (Github Actions)
+
 ## 1.4.1 (2024-03-22)
 * Fix an encoding issue for parentheses
 * Fix cloud logging link scope issue
