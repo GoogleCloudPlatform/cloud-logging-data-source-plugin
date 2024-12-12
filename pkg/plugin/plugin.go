@@ -343,19 +343,29 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 
 	var conf config
 	if err := json.Unmarshal(settings.JSONData, &conf); err != nil {
-		return nil, fmt.Errorf("unmarshal: %w", err)
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("unmarshal: %s", err),
+		}, nil
 	}
 
 	if conf.DefaultProject == "" && conf.AuthType == gceAuthentication {
 		proj, err := utils.GCEDefaultProject(ctx, "")
 		if err != nil {
-			return nil, fmt.Errorf("failed to get GCE default project: %w", err)
+			return &backend.CheckHealthResult{
+				Status:  backend.HealthStatusError,
+				Message: fmt.Sprintf("failed to get GCE default project: %s", err),
+			}, nil
 		}
 		conf.DefaultProject = proj
+	} else if conf.DefaultProject == "" {
+		log.DefaultLogger.Warn("no default project configured")
 	}
+
 	if d.passthrough {
 		d.client.SetPassthroughHeaders(ctx, req.Headers)
 	}
+
 	if err := d.client.TestConnection(ctx, conf.DefaultProject); err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
