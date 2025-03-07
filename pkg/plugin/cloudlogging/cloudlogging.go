@@ -36,7 +36,11 @@ func GetLogEntryMessage(entry *loggingpb.LogEntry) (string, error) {
 		if msg, ok := t.JsonPayload.Fields["message"]; ok {
 			return msg.GetStringValue(), nil
 		}
-		return t.JsonPayload.String(), nil
+		byteArr, err := t.JsonPayload.MarshalJSON()
+		if err != nil {
+			return "", fmt.Errorf("failed to marshal JSON payload: %v", err)
+		}
+		return string(byteArr), nil
 	case *loggingpb.LogEntry_TextPayload:
 		return t.TextPayload, nil
 	case *loggingpb.LogEntry_ProtoPayload:
