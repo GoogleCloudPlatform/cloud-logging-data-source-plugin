@@ -20,6 +20,7 @@ import { DataSourceOptions, GoogleAuthType } from '@grafana/google-sdk';
 export const authTypes: Array<SelectableValue<string>> = [
     { label: 'Google JWT File', value: GoogleAuthType.JWT },
     { label: 'GCE Default Service Account', value: GoogleAuthType.GCE },
+    { label: 'Access Token', value: 'accessToken' },
 ];
 
 /**
