@@ -94,18 +94,7 @@ func TestGetLogEntryMessage(t *testing.T) {
 				},
 			},
 			expected: &expectedResult{
-				message: loggingpb.LogEntry_JsonPayload{
-					JsonPayload: &structpb.Struct{
-						Fields: map[string]*structpb.Value{
-							"severity": {
-								Kind: &structpb.Value_StringValue{StringValue: "INFO"},
-							},
-							"database_role": {
-								Kind: &structpb.Value_StringValue{StringValue: "user"},
-							},
-						},
-					},
-				}.JsonPayload.String(),
+				message: "{\"database_role\":\"user\",\"severity\":\"INFO\"}",
 			},
 		},
 		{
