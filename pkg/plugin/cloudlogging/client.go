@@ -155,6 +155,36 @@ func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersona
 	}, nil
 }
 
+// NewClientWithAccessToken creates a new Client using an access token for authentication.
+// Since the datasource is re-created whenever the token changes, we can treat this token as static.
+func NewClientWithAccessToken(ctx context.Context, accessToken string) (*Client, error) {
+	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: accessToken})
+
+	client, err := logging.NewClient(ctx, option.WithTokenSource(ts),
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+
+	rClient, err := resourcemanager.NewService(ctx, option.WithTokenSource(ts),
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+
+	configClient, err := logging.NewConfigClient(ctx, option.WithTokenSource(ts),
+		option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+
+	return &Client{
+		lClient:      client,
+		rClient:      rClient.Projects,
+		configClient: configClient,
+	}, nil
+}
+
 // Close closes the underlying connection to the GCP API
 func (c *Client) Close() error {
 	c.configClient.Close()

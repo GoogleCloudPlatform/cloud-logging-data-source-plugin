@@ -38,12 +38,15 @@ var (
 	_                     backend.CheckHealthHandler    = (*CloudLoggingDatasource)(nil)
 	_                     instancemgmt.InstanceDisposer = (*CloudLoggingDatasource)(nil)
 	errMissingCredentials                               = errors.New("missing credentials")
+	errMissingAccessToken                               = errors.New("missing access token")
 )
 
 const (
-	privateKeyKey     = "privateKey"
-	gceAuthentication = "gce"
-	jwtAuthentication = "jwt"
+	privateKeyKey             = "privateKey"
+	gceAuthentication         = "gce"
+	jwtAuthentication         = "jwt"
+	accessTokenAuthentication = "accessToken"
+	accessTokenKey            = "accessToken"
 )
 
 // config is the fields parsed from the front end
@@ -78,7 +81,7 @@ type serviceAccountJSON struct {
 }
 
 // NewCloudLoggingDatasource creates a new datasource instance.
-func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	var conf config
 	if err := json.Unmarshal(settings.JSONData, &conf); err != nil {
 		return nil, fmt.Errorf("unmarshal: %w", err)
@@ -91,7 +94,8 @@ func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (ins
 	var client_err error
 	var client *cloudlogging.Client
 
-	if conf.AuthType == jwtAuthentication {
+	switch conf.AuthType {
+	case jwtAuthentication:
 		privateKey, ok := settings.DecryptedSecureJSONData[privateKeyKey]
 		if !ok || privateKey == "" {
 			return nil, errMissingCredentials
@@ -107,15 +111,24 @@ func NewCloudLoggingDatasource(settings backend.DataSourceInstanceSettings) (ins
 		} else {
 			client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount)
 		}
-	} else {
+	case gceAuthentication:
 		if conf.UsingImpersonation {
 			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), nil, conf.ServiceAccountToImpersonate)
 		} else {
 			client, client_err = cloudlogging.NewClientWithGCE(context.TODO())
 		}
+	case accessTokenAuthentication:
+		accessToken, ok := settings.DecryptedSecureJSONData[accessTokenKey]
+		if !ok || accessToken == "" {
+			return nil, errMissingAccessToken
+		}
+		client, client_err = cloudlogging.NewClientWithAccessToken(context.TODO(), accessToken)
+	default:
+		return nil, fmt.Errorf("unknown authentication type: %s", conf.AuthType)
 	}
+
 	if client_err != nil {
-		return nil, client_err
+		return nil, fmt.Errorf("create client: %w", client_err)
 	}
 
 	return &CloudLoggingDatasource{

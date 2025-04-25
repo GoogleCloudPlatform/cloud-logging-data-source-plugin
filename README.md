@@ -37,6 +37,9 @@ You can also configure the plugin to use [service account impersonation](https:/
 You need to ensure the service account used by this plugin has the `iam.serviceAccounts.getAccessToken` permission. This permission is in roles like the [Service Account Token Creator role](https://cloud.google.com/iam/docs/understanding-roles#iam.serviceAccountTokenCreator) (roles/iam.serviceAccountTokenCreator). Also, the service account impersonated
 by this plugin needs logging read and project list permissions.
 
+### Access Token
+You can also set up the datasource-syncer to rotate an access token for you. 
+
 ### Grafana Configuration
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"

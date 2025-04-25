@@ -1,4 +1,7 @@
 # Changelog
+## 1.5.0 (2025-04-08)
+* Support new Access Token auth type
+
 ## 1.4.1 (2024-03-22)
 * Fix an encoding issue for parentheses
 * Fix cloud logging link scope issue
