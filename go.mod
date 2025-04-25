@@ -12,7 +12,7 @@ require (
 	golang.org/x/oauth2 v0.29.0
 	google.golang.org/api v0.229.0
 	google.golang.org/genproto v0.0.0-20250425173222-7b384671a197
-	google.golang.org/genproto/googleapis/api v0.0.0-20250414145226-207652e42e2e
+	google.golang.org/genproto/googleapis/api v0.0.0-20250425173222-7b384671a197
 	google.golang.org/protobuf v1.36.6
 )
 
