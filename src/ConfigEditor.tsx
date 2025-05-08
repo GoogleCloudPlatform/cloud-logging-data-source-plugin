@@ -17,7 +17,7 @@
 import React, { PureComponent } from 'react';
 import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
 import { DataSourceSecureJsonData, ConnectionConfig } from '@grafana/google-sdk';
-import { Label } from '@grafana/ui';
+import { CustomHeadersSettings, Label } from '@grafana/ui';
 import { CloudLoggingOptions } from 'types';
 
 export type Props = DataSourcePluginOptionsEditorProps<CloudLoggingOptions, DataSourceSecureJsonData>;
@@ -51,6 +51,19 @@ export class ConfigEditor extends PureComponent<Props> {
                             }}
                         />
                     </div>
+                    <CustomHeadersSettings
+                      dataSourceConfig={this.props.options}
+                      onChange={(options) => {
+                        this.props.onOptionsChange({
+                          ...this.props.options,
+                          jsonData: {
+                            ...this.props.options.jsonData,
+                            ...options.jsonData,
+                          },
+                          secureJsonData: options.secureJsonData,
+                        });
+                      }}
+                    />
                 </div>
             </>
         );
