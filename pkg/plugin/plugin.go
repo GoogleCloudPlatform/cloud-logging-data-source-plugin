@@ -91,6 +91,11 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		conf.AuthType = jwtAuthentication
 	}
 
+	// Check if access token is configured and switch auth type if present
+	if accessToken, ok := settings.DecryptedSecureJSONData[accessTokenKey]; ok && accessToken != "" {
+		conf.AuthType = accessTokenAuthentication
+	}
+
 	var client_err error
 	var client *cloudlogging.Client
 
