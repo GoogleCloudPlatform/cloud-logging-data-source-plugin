@@ -19,7 +19,8 @@ import { DataSource } from './datasource';
 import { ConfigEditor } from './ConfigEditor';
 import { LoggingQueryEditor } from './QueryEditor';
 import { CloudLoggingOptions, Query } from './types';
+import { DataSourceSecureJsonData } from '@grafana/google-sdk';
 
-export const plugin = new DataSourcePlugin<DataSource, Query, CloudLoggingOptions>(DataSource)
+export const plugin = new DataSourcePlugin<DataSource, Query, CloudLoggingOptions, DataSourceSecureJsonData>(DataSource)
   .setConfigEditor(ConfigEditor)
   .setQueryEditor(LoggingQueryEditor);
