@@ -1,4 +1,10 @@
 # Changelog
+## 1.5.0 (2025-05-29)
+* Update plugin to support access token auth
+* Add datasource syncer
+* Fix message from jsonPayload doesn't show up in Grafana
+* Update a few dependencies
+
 ## 1.4.1 (2024-03-22)
 * Fix an encoding issue for parentheses
 * Fix cloud logging link scope issue

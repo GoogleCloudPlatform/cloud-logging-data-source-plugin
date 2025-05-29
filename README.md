@@ -19,7 +19,7 @@ You can follow the steps to enable it:
 
 ### Generate a JWT file & Assign IAM Permissions
 
-1. If you don't have a GCP project, add a new GCP project. [link](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
+1. If you don't have a GCP project, add a new GCP project [here](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
 2. Open the [Credentials](https://console.developers.google.com/apis/credentials) page in the Google API Console
 3. Click **Create Credentials** then click **Service account**
 4. On the Create service account page, enter the Service account details
@@ -32,7 +32,7 @@ If you want to access logs in multiple cloud projects, you need to ensure the se
 
 If you host Grafana on a GCE VM, you can also use the [Compute Engine service account](https://cloud.google.com/compute/docs/access/service-accounts#serviceaccount). You need to make sure the service account has sufficient permissions to access the scopes and logs in all projects.
 
-Similar to [Prometheus data sources on Google Cloud](https://cloud.google.com/stackdriver/docs/managed-prometheus/query#use-serverless), you can also configure a scheduled job to use an OAuth2 access token to view the logs. Please follow the steps in the [data source syncer README](./datasource-syncer/README.md) to configure it.
+Similar to [Prometheus data sources on Google Cloud](https://cloud.google.com/stackdriver/docs/managed-prometheus/query#use-serverless), you can also configure a scheduled job to use an OAuth2 access token to view the logs. Please follow the steps in the [data source syncer README](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/datasource-syncer/README.md) to configure it.
 
 ### Service account impersonation
 You can also configure the plugin to use [service account impersonation](https://cloud.google.com/iam/docs/service-account-impersonation).
@@ -43,8 +43,8 @@ by this plugin needs logging read and project list permissions.
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"
 3. Select "Google Cloud Logging"
-4. Provide credentials in a JWT file, either by using the file selector or pasting the contents of the file.
-5. Click "Save & test" to test that logs can be queried from Cloud Logging.
+4. Provide credentials from your JWT file, either by uploading it using the file selector or by pasting its contents directly into the designated field
+5. Click "Save & test" to test that logs can be queried from Cloud Logging
 
 ![image info](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/cloud_logging_config.png?raw=true)
 
