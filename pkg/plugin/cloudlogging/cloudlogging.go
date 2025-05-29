@@ -36,7 +36,7 @@ func GetLogEntryMessage(entry *loggingpb.LogEntry) (string, error) {
 		if msg, ok := t.JsonPayload.Fields["message"]; ok {
 			msg_val := msg.GetStringValue()
 			if msg_val == "" {
-				// If the message field is empty, we try to marshal the entire JSON payload
+				// If the message field is empty, we try to marshal the entire message field
 				msg_byte_val, err := msg.MarshalJSON()
 				if err == nil {
 					return string(msg_byte_val), nil

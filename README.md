@@ -19,11 +19,11 @@ You can follow the steps to enable it:
 
 ### Generate a JWT file & Assign IAM Permissions
 
-1. If you don't have gcp project, add a new gcp project. [link](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
+1. If you don't have a GCP project, add a new GCP project. [link](https://cloud.google.com/resource-manager/docs/creating-managing-projects#console)
 2. Open the [Credentials](https://console.developers.google.com/apis/credentials) page in the Google API Console
 3. Click **Create Credentials** then click **Service account**
 4. On the Create service account page, enter the Service account details
-5. On the `Create service account` page, fill in the `Service account details` and then click `Create and Continue`
+5. Fill in the `Service account details` and then click `Create and Continue`
 6. On the `Grant this service account access to project` section, add the `Logs Viewer` role and `Logs View Accessor` role under `Logging` to the service account. Click `Done`
 7. In the next step, click the service account you just created. Under the `Keys` tab and select `Add key` and `Create new key`
 8. Choose key type `JSON` and click `Create`. A JSON key file will be created and downloaded to your computer
@@ -31,6 +31,8 @@ You can follow the steps to enable it:
 If you want to access logs in multiple cloud projects, you need to ensure the service account has permission to read logs from all of them.
 
 If you host Grafana on a GCE VM, you can also use the [Compute Engine service account](https://cloud.google.com/compute/docs/access/service-accounts#serviceaccount). You need to make sure the service account has sufficient permissions to access the scopes and logs in all projects.
+
+Similar to [Prometheus data sources on Google Cloud](https://cloud.google.com/stackdriver/docs/managed-prometheus/query#use-serverless), you can also configure a scheduled job to use an OAuth2 access token to view the logs. Please follow the steps in the [data source syncer README](./datasource-syncer/README.md) to configure it.
 
 ### Service account impersonation
 You can also configure the plugin to use [service account impersonation](https://cloud.google.com/iam/docs/service-account-impersonation).
@@ -78,4 +80,4 @@ Below is an example of defining a variable for log views.
 
 Cloud Logging Logo (`src/img/logo.svg`) is from Google Cloud's [Official icons and sample diagrams](https://cloud.google.com/icons)
 
-As commented, `JWTForm` and `JWTConfigEditor` are largely based on Apache-2.0 licensed [grafana-google-sdk-react](https://github.com/grafana/grafana-google-sdk-react/)
+As commented in the code, `JWTForm` and `JWTConfigEditor` are largely based on the Apache-2.0 licensed [grafana-google-sdk-react](https://github.com/grafana/grafana-google-sdk-react/).
