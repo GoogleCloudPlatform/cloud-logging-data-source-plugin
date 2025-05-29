@@ -141,9 +141,9 @@ and [Cloud Scheduler](https://cloud.google.com/scheduler), do the following:
 
     ```bash
     # These values are required.
-    export GRAFANA_INSTANCE_URL=YOUR_GRAFANA_INSTANCE_URL # The Grafana instance URL from step 2. This is a URL. Include "http://" or "https://".
-    export GRAFANA_DATASOURCE_UID=YOUR_GRAFANA_DATASOURCE_UID # The Grafana data source UID from step 3. This is not a URL.
-    export GRAFANA_SERVICE_ACCOUNT_TOKEN=YOUR_GRAFANA_SERVICE_ACCOUNT_TOKEN # The Grafana service account token from step 4.
+    export GRAFANA_INSTANCE_URL=YOUR_GRAFANA_INSTANCE_URL # The Grafana instance URL from step 3. This is a URL. Include "http://" or "https://".
+    export GRAFANA_DATASOURCE_UID=YOUR_GRAFANA_DATASOURCE_UID # The Grafana data source UID from step 4. This is not a URL.
+    export GRAFANA_SERVICE_ACCOUNT_TOKEN=YOUR_GRAFANA_SERVICE_ACCOUNT_TOKEN # The Grafana service account token from step 5.
     ```
 
 1. Create a secret in Secret Manager:
@@ -212,8 +212,11 @@ and [Cloud Scheduler](https://cloud.google.com/scheduler), do the following:
 
    It can take up to 15 seconds for the data source to be updated.
 
-1. Go to your newly configured Grafana data source and verify the **Access Token
-   ** field has the value `configured` and the **Project ID** field has your cloud project id. You might have to refresh the page. Once verified, go to the bottom
+1. Go to your newly configured Grafana data source and verify the **Access Token**
+   field has the value `configured` and the **Project ID** field displays the Google
+   Cloud Project ID you configured (e.g., the value of your ${PROJECT_ID} variable).
+
+   You might have to refresh the page. Once verified, go to the bottom
    of the page, select **Save & test**, and ensure you see a green checkmark saying that
    the datasource is properly configured. You need to select **Save & test** at
    least once to ensure that label autocompletion in Grafana works.
