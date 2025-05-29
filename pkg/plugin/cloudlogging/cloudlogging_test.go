@@ -41,7 +41,7 @@ func TestGetLogEntryMessage(t *testing.T) {
 		expected *expectedResult
 	}{
 		{
-			name:  "Text payload",
+			name:  "Empty payload",
 			entry: &loggingpb.LogEntry{},
 			expected: &expectedResult{
 				err: errors.New("empty payload <nil>"),
@@ -94,7 +94,7 @@ func TestGetLogEntryMessage(t *testing.T) {
 				},
 			},
 			expected: &expectedResult{
-				message: "{\"database_role\":\"user\",\"severity\":\"INFO\"}",
+				message: "{\"database_role\":\"user\", \"severity\":\"INFO\"}",
 			},
 		},
 		{
@@ -120,6 +120,50 @@ func TestGetLogEntryMessage(t *testing.T) {
 				message: "Message body",
 			},
 		},
+		{
+			name: "JSON payload, with empty string message",
+			entry: &loggingpb.LogEntry{
+				Payload: &loggingpb.LogEntry_JsonPayload{
+					JsonPayload: &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							"message": {
+								Kind: &structpb.Value_StringValue{StringValue: ""},
+							},
+							"data": {
+								Kind: &structpb.Value_StringValue{StringValue: "some data"},
+							},
+						},
+					},
+				},
+			},
+			expected: &expectedResult{
+				message: "\"\"",
+			},
+		},
+		{
+			name: "JSON payload, with complex message field",
+			entry: &loggingpb.LogEntry{
+				Payload: &loggingpb.LogEntry_JsonPayload{
+					JsonPayload: &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							"message": {
+								Kind: &structpb.Value_StructValue{
+									StructValue: &structpb.Struct{
+										Fields: map[string]*structpb.Value{
+											"text": {Kind: &structpb.Value_StringValue{StringValue: "nested message"}},
+											"code": {Kind: &structpb.Value_NumberValue{NumberValue: 123}},
+										},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+			expected: &expectedResult{
+				message: "{\"code\":123, \"text\":\"nested message\"}",
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -128,6 +172,8 @@ func TestGetLogEntryMessage(t *testing.T) {
 
 			if tc.expected.err != nil {
 				require.ErrorContains(t, err, tc.expected.err.Error())
+			} else {
+				require.NoError(t, err)
 			}
 			require.Equal(t, tc.expected.message, message)
 		})
@@ -254,7 +300,7 @@ func TestGetLogLabels(t *testing.T) {
 			},
 		},
 		{
-			name: "JSON payload",
+			name: "JSON payload with nested fields",
 			entry: &loggingpb.LogEntry{
 				InsertId: "insert-id4",
 				Labels: map[string]string{
@@ -299,6 +345,100 @@ func TestGetLogLabels(t *testing.T) {
 				"level":                               "alert",
 				"jsonPayload.service_context.service": "some-service",
 				"jsonPayload.service_context.version": "v42",
+			},
+		},
+		{
+			name: "Text payload",
+			entry: &loggingpb.LogEntry{
+				InsertId: "insert-id5",
+				Payload: &loggingpb.LogEntry_TextPayload{
+					TextPayload: "This is a text log message",
+				},
+			},
+			expected: data.Labels{
+				"id":          "insert-id5",
+				"level":       "info",
+				"textPayload": "This is a text log message",
+			},
+		},
+		{
+			name: "Trace and span data",
+			entry: &loggingpb.LogEntry{
+				InsertId: "insert-id6",
+				Trace:    "projects/my-project/traces/06796866738c859f2f19b7cfb3214824",
+				SpanId:   "000000000000004a",
+			},
+			expected: data.Labels{
+				"id":      "insert-id6",
+				"level":   "info",
+				"trace":   "projects/my-project/traces/06796866738c859f2f19b7cfb3214824",
+				"traceId": "06796866738c859f2f19b7cfb3214824",
+				"spanId":  "000000000000004a",
+			},
+		},
+		{
+			name: "JSON payload with various field types",
+			entry: &loggingpb.LogEntry{
+				InsertId: "insert-id7",
+				Payload: &loggingpb.LogEntry_JsonPayload{
+					JsonPayload: &structpb.Struct{
+						Fields: map[string]*structpb.Value{
+							"string_field": {Kind: &structpb.Value_StringValue{StringValue: "test"}},
+							"number_field": {Kind: &structpb.Value_NumberValue{NumberValue: 42.5}},
+							"bool_field":   {Kind: &structpb.Value_BoolValue{BoolValue: false}},
+							"null_field":   {Kind: &structpb.Value_NullValue{}},
+							"list_field": {Kind: &structpb.Value_ListValue{
+								ListValue: &structpb.ListValue{
+									Values: []*structpb.Value{
+										{Kind: &structpb.Value_StringValue{StringValue: "item1"}},
+										{Kind: &structpb.Value_NumberValue{NumberValue: 2}},
+									},
+								},
+							}},
+						},
+					},
+				},
+			},
+			expected: data.Labels{
+				"id":                       "insert-id7",
+				"level":                    "info",
+				"jsonPayload.string_field": "test",
+				"jsonPayload.number_field": "42.5",
+				"jsonPayload.bool_field":   "false",
+				"jsonPayload.null_field":   "null_value:NULL_VALUE",
+				"jsonPayload.list_field":   "list_value:{values:{string_value:\"item1\"}  values:{number_value:2}}",
+			},
+		},
+		{
+			name: "Proto payload with AuditLog",
+			entry: &loggingpb.LogEntry{
+				InsertId: "insert-id8",
+				Payload: &loggingpb.LogEntry_ProtoPayload{
+					ProtoPayload: &anypb.Any{
+						TypeUrl: "type.googleapis.com/google.cloud.audit.AuditLog",
+						Value:   []byte{}, // Empty for simplicity in test
+					},
+				},
+			},
+			expected: data.Labels{
+				"id":    "insert-id8",
+				"level": "info",
+			},
+		},
+		{
+			name: "Proto payload with RequestLog",
+			entry: &loggingpb.LogEntry{
+				InsertId: "insert-id9",
+				Payload: &loggingpb.LogEntry_ProtoPayload{
+					ProtoPayload: &anypb.Any{
+						TypeUrl: "type.googleapis.com/google.appengine.logging.v1.RequestLog",
+						Value:   []byte{}, // Empty for simplicity in test
+					},
+				},
+			},
+			expected: data.Labels{
+				"id":    "insert-id9",
+				"level": "info",
 			},
 		},
 	}
