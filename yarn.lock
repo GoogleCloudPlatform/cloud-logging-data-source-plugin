@@ -1471,10 +1471,10 @@
     ua-parser-js "^1.0.32"
     web-vitals "^3.0.4"
 
-"@grafana/google-sdk@^0.0.3":
-  version "0.0.3"
-  resolved "https://registry.npmjs.org/@grafana/google-sdk/-/google-sdk-0.0.3.tgz"
-  integrity sha512-bhroulVPB0ntL6reSn4w6zyumwiV5y9VjaL41ht1omKGjziGmwtIsAjiMRaGpQluT+R1ya8ononADBBicKeT3g==
+"@grafana/google-sdk@^0.3.0":
+  version "0.3.5"
+  resolved "https://registry.yarnpkg.com/@grafana/google-sdk/-/google-sdk-0.3.5.tgz#9fa5a3a7b3e5d53874443fde6219e3dadccae9ac"
+  integrity sha512-XSOdCkyQUAQk8rESpWxS7BSEXlegyL6sRGK33k6aFFvWmpP2U9XGQ6z6iKVbYVNQvJVoMnYDU3NOkJlkTxCw6g==
 
 "@grafana/runtime@^9.0.2":
   version "9.3.6"
