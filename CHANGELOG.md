@@ -1,4 +1,7 @@
 # Changelog
+## 1.5.1 (2025-08-14)
+* Added pagination to ListProjects
+
 ## 1.5.0 (2025-05-29)
 * Update plugin to support access token auth
 * Add datasource syncer
