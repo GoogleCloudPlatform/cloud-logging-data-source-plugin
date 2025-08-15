@@ -98,43 +98,57 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   /**
    * Keep an up-to-date URI that links to the equivalent query in the GCP console
    */
-  const gcpConsoleURI = useMemo<string | undefined>(() => {
+    const gcpConsoleURI = useMemo<string | undefined>(() => {
     if (!query.queryText) {
       return undefined;
     }
 
     let storageScope = "";
     if (query.projectId) {
-        storageScope = `;storageScope=storage,projects/${query.projectId}`;
+        let scopePath = `storage,projects/${query.projectId}`;
     
         if (query.bucketId) {
-            storageScope += `/locations/${query.bucketId}`;
+            // Check if bucketId already includes 'locations/' prefix
+            if (query.bucketId.startsWith('locations/')) {
+                scopePath += `/${query.bucketId}`;
+            } else {
+                scopePath += `/locations/${query.bucketId}`;
+            }
         } else {
-            storageScope += `/locations/global/buckets/_Default`;
+            scopePath += `/locations/global/buckets/_Default`;
         }
         if (query.viewId) {
-            storageScope += `/views/${query.viewId}`;
+            scopePath += `/views/${query.viewId}`;
         } else {
-            storageScope += `/views/_AllLogs`;
+            scopePath += `/views/_AllLogs`;
         }
+        
+        // URL encode the forward slashes in the storage scope
+        storageScope = `;storageScope=${scopePath.replace(/\//g, '%2F')}`;
     }
 
-    const encodedText = encodeURIComponent(`${query.queryText}${storageScope}`).replace(/[!'()*]/g, function(c) {
+    const encodedText = encodeURIComponent(`${query.queryText}`).replace(/[!'()*]/g, function(c) {
         if (c === '(' || c === ')') {
           return '%25' + c.charCodeAt(0).toString(16);
         }
         return '%' + c.charCodeAt(0).toString(16);
     });
-    const queryText = `query=${encodedText}`;
-    // If range is somehow undefined, don't add timeRange to the URI
-    const timeRange = range !== undefined ?
-      `timeRange=${range?.from?.toISOString()}%2F${range?.to?.toISOString()}`
-      : '';
+    
+    // Build query string parameters
+    let queryParams = [`project=${query.projectId}`, `query=${encodedText}`];
+    
+    // Add storageScope without the semicolon prefix
+    if (storageScope) {
+        queryParams.push(storageScope.substring(1)); // Remove the leading semicolon
+    }
+    
+    // Add time parameters
+    if (range !== undefined) {
+        queryParams.push(`startTime=${range?.from?.toISOString()}`);
+        queryParams.push(`endTime=${range?.to?.toISOString()}`);
+    }
 
-    return `https://console.cloud.google.com/logs/query;` +
-      queryText +
-      `;${timeRange}` +
-      `?project=${query.projectId}`;
+    return `https://console.cloud.google.com/logs/query?${queryParams.join('&')}`;
   }, [query, range]);
 
   return (
