@@ -214,18 +214,32 @@ func (q *Query) String() string {
 
 // ListProjects returns the project IDs of all visible projects
 func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
-	response, err := c.rClient.List().Do()
-	if err != nil {
-		return nil, err
-	}
-
 	projectIDs := []string{}
-	for _, p := range response.Projects {
-		if p.LifecycleState == "DELETE_REQUESTED" || p.LifecycleState == "DELETE_IN_PROGRESS" {
-			continue
+	pageToken := ""
+	
+	for {
+		call := c.rClient.List()
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
 		}
-		projectIDs = append(projectIDs, p.ProjectId)
+		response, err := call.Do()
+		if err != nil {
+			return nil, err
+		}
+		// Process projects from this page
+		for _, p := range response.Projects {
+			if p.LifecycleState == "DELETE_REQUESTED" || p.LifecycleState == "DELETE_IN_PROGRESS" {
+				continue
+			}
+			projectIDs = append(projectIDs, p.ProjectId)
+		}
+		// Check if there are more pages
+		if response.NextPageToken == "" {
+			break
+		}
+		pageToken = response.NextPageToken
 	}
+	
 	return projectIDs, nil
 }
 
