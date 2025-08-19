@@ -16,7 +16,7 @@
     "@types/lodash": "latest"
   },
   "resolutions": {
-    "rxjs": "7.3.0"
+    "rxjs": "7.8.2"
   },
   "engines": {
     "node": ">=14"
