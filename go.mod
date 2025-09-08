@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin
 
-go 1.23.0
+go 1.24.0
 
 toolchain go1.24.2
 
@@ -12,8 +12,8 @@ require (
 	golang.org/x/oauth2 v0.29.0
 	google.golang.org/api v0.229.0
 	google.golang.org/genproto v0.0.0-20250425173222-7b384671a197
-	google.golang.org/genproto/googleapis/api v0.0.0-20250425173222-7b384671a197
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/genproto/googleapis/api v0.0.0-20250908214217-97024824d090
+	google.golang.org/protobuf v1.36.8
 )
 
 require (
@@ -114,7 +114,7 @@ require (
 	golang.org/x/time v0.11.0 // indirect
 	golang.org/x/tools v0.21.1-0.20240508182429-e35e4ccd0d2d // indirect
 	golang.org/x/xerrors v0.0.0-20220907171357-04be3eba64a2 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20250414145226-207652e42e2e // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20250826171959-ef028d996bc1 // indirect
 	google.golang.org/grpc v1.71.1 // indirect
 	gopkg.in/fsnotify/fsnotify.v1 v1.4.7 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
