@@ -185,6 +185,33 @@ func NewClientWithAccessToken(ctx context.Context, accessToken string) (*Client,
 	}, nil
 }
 
+// NewClientWithPassThrough creates a new Clients using Oauth browser credentials
+func NewClientWithPassThrough(ctx context.Context, headers map[string]string) (*Client, error) {
+	token, _ := strings.CutPrefix(headers["Authorization"], "Bearer ")
+	oauthOpt := option.WithTokenSource(
+		oauth2.StaticTokenSource(&oauth2.Token{
+			AccessToken: token,
+		}),
+	)
+	client, err := logging.NewClient(ctx, oauthOpt)
+	if err != nil {
+		return nil, err
+	}
+	rClient, err := resourcemanager.NewService(ctx, oauthOpt)
+	if err != nil {
+		return nil, err
+	}
+	configClient, err := logging.NewConfigClient(ctx, oauthOpt)
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		lClient:      client,
+		rClient:      rClient.Projects,
+		configClient: configClient,
+	}, nil
+}
+
 // Close closes the underlying connection to the GCP API
 func (c *Client) Close() error {
 	c.configClient.Close()
