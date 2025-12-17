@@ -16,9 +16,9 @@
 
 import { DataQuery, SelectableValue } from '@grafana/data';
 import {
+  DataSourceSecureJsonData as BaseDataSourceSecureJsonData,
   DataSourceOptions,
   GoogleAuthType,
-  DataSourceSecureJsonData as BaseDataSourceSecureJsonData,
 } from '@grafana/google-sdk';
 
 export interface DataSourceSecureJsonData extends BaseDataSourceSecureJsonData {
@@ -29,6 +29,7 @@ export const authTypes: Array<SelectableValue<string>> = [
   { label: 'Google JWT File', value: GoogleAuthType.JWT },
   { label: 'GCE Default Service Account', value: GoogleAuthType.GCE },
   { label: 'Access Token', value: 'accessToken' },
+  { label: 'OAuth Passthrough', value: 'oauthPassthrough' },
 ];
 
 /**
@@ -38,6 +39,7 @@ export interface DataSourceOptionsExt extends DataSourceOptions {
   gceDefaultProject?: string;
   serviceAccountToImpersonate?: string;
   usingImpersonation?: boolean;
+  oauthPassThru?: boolean;
 }
 
 /**
