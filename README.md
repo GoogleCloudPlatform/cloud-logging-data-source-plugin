@@ -1,6 +1,7 @@
 # Google Cloud Logging Data Source
 
 ## Overview
+
 The Google Cloud Logging Data Source is a backend data source plugin for Grafana,
 which allows users to query and visualize their Google Cloud logs in Grafana.
 
@@ -35,11 +36,21 @@ If you host Grafana on a GCE VM, you can also use the [Compute Engine service ac
 Similar to [Prometheus data sources on Google Cloud](https://cloud.google.com/stackdriver/docs/managed-prometheus/query#use-serverless), you can also configure a scheduled job to use an OAuth2 access token to view the logs. Please follow the steps in the [data source syncer README](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/datasource-syncer/README.md) to configure it.
 
 ### Service account impersonation
+
 You can also configure the plugin to use [service account impersonation](https://cloud.google.com/iam/docs/service-account-impersonation).
 You need to ensure the service account used by this plugin has the `iam.serviceAccounts.getAccessToken` permission. This permission is in roles like the [Service Account Token Creator role](https://cloud.google.com/iam/docs/understanding-roles#iam.serviceAccountTokenCreator) (roles/iam.serviceAccountTokenCreator). Also, the service account impersonated
 by this plugin needs logging read and project list permissions.
 
+### OAuth Passthrough
+
+You can configure the data source to use the OAuth token of the signed in user to authenticate to Google Cloud Logging. This requires a Grafana instance that is configured with [Google authentication](https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/google/).
+
+Once Grafana is configured with Google authentication for signing in, ensure that the scopes set in the Grafana configuration include: `https://www.googleapis.com/auth/userinfo.profile`, `https://www.googleapis.com/auth/userinfo.email`, and `https://www.googleapis.com/auth/logging.read`. The latter will allow the signed in user to read Google Cloud Logging data.
+
+You can then configure the data source with the `OAuth Passthrough` authentication method. Ensure that you provide a default project ID otherwise the health-check will fail.
+
 ### Grafana Configuration
+
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"
 3. Select "Google Cloud Logging"
@@ -66,6 +77,7 @@ datasources:
 ```
 
 ### Supported variables
+
 The plugin currently supports variables for logging scopes. For example, you can define a project variable and switch between projects. The following screenshot shows an example using project, bucket, and view.
 
 ![template variables](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/template_vars.png?raw=true)
@@ -74,6 +86,7 @@ Below is an example of defining a variable for log views.
 ![define a variable](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/template_query_vars.png?raw=true)
 
 ### Alerting
+
 [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/fundamentals/data-source-alerting/) is not directly supported due to how [Logging Query Language](https://cloud.google.com/logging/docs/view/logging-query-language) works on Google Cloud. If you need to create alerts based on logs, consider using [Log-based metrics](https://cloud.google.com/logging/docs/logs-based-metrics) and a [Cloud Monitoring data source](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/).
 
 ## Licenses
