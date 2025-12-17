@@ -98,6 +98,8 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		conf.AuthType = accessTokenAuthentication
 	}
 
+	oauthPassThrough := false
+
 	var client_err error
 	var client *cloudlogging.Client
 
@@ -130,6 +132,9 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 			return nil, errMissingAccessToken
 		}
 		client, client_err = cloudlogging.NewClientWithAccessToken(context.TODO(), accessToken)
+	case oauthpassthroughAuthentication:
+		oauthPassThrough = true
+		break
 	default:
 		return nil, fmt.Errorf("unknown authentication type: %s", conf.AuthType)
 	}
@@ -139,14 +144,16 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 	}
 
 	return &CloudLoggingDatasource{
-		client: client,
+		client:           client,
+		oauthPassThrough: oauthPassThrough,
 	}, nil
 }
 
 // CloudLoggingDatasource is an example datasource which can respond to data queries, reports
 // its health and has streaming skills.
 type CloudLoggingDatasource struct {
-	client cloudlogging.API
+	client           cloudlogging.API
+	oauthPassThrough bool
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
@@ -162,6 +169,18 @@ func (d *CloudLoggingDatasource) Dispose() {
 // Currently limited resources are fetched, other requests receive a 404
 func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	// log.DefaultLogger.Info("CallResource called")
+
+	if d.oauthPassThrough {
+		// join headers
+		headers := make(map[string]string)
+		for k, v := range req.Headers {
+			headers[k] = strings.Join(v, ",")
+		}
+		err := d.SetOauthClient(ctx, headers)
+		if err != nil {
+			return err
+		}
+	}
 
 	var body []byte
 
@@ -248,6 +267,13 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 // contains Frames ([]*Frame).
 func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	// log.DefaultLogger.Info("QueryData called")
+
+	if d.oauthPassThrough {
+		err := d.SetOauthClient(ctx, req.Headers)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// create response struct
 	response := backend.NewQueryDataResponse()
@@ -346,6 +372,13 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
 	// log.DefaultLogger.Info("CheckHealth called")
 
+	if d.oauthPassThrough {
+		err := d.SetOauthClient(ctx, req.Headers)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	var status = backend.HealthStatusOk
 	settings := req.PluginContext.DataSourceInstanceSettings
 
@@ -361,6 +394,12 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 		}
 		conf.DefaultProject = proj
 	}
+	if conf.DefaultProject == "" && conf.OAuthPassThru {
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: "Please define a default project for OAuth authentication",
+		}, nil
+	}
 	if err := d.client.TestConnection(ctx, conf.DefaultProject); err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
@@ -372,4 +411,13 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 		Status:  status,
 		Message: fmt.Sprintf("Successfully queried logs from GCP project %s", conf.DefaultProject),
 	}, nil
+}
+
+func (d *CloudLoggingDatasource) SetOauthClient(ctx context.Context, headers map[string]string) error {
+	client, err := cloudlogging.NewClientWithPassThrough(ctx, headers)
+	if err != nil {
+		return err
+	}
+	d.client = client
+	return nil
 }
