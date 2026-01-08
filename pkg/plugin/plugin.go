@@ -134,7 +134,6 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		client, client_err = cloudlogging.NewClientWithAccessToken(context.TODO(), accessToken)
 	case oauthpassthroughAuthentication:
 		oauthPassThrough = true
-		break
 	default:
 		return nil, fmt.Errorf("unknown authentication type: %s", conf.AuthType)
 	}
@@ -160,8 +159,10 @@ type CloudLoggingDatasource struct {
 // created. As soon as datasource settings change detected by SDK old datasource instance will
 // be disposed and a new one will be created using NewSampleDatasource factory function.
 func (d *CloudLoggingDatasource) Dispose() {
-	if err := d.client.Close(); err != nil {
-		log.DefaultLogger.Error("failed closing client", "error", err)
+	if d.client != nil {
+		if err := d.client.Close(); err != nil {
+			log.DefaultLogger.Error("failed closing client", "error", err)
+		}
 	}
 }
 
@@ -170,16 +171,23 @@ func (d *CloudLoggingDatasource) Dispose() {
 func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
 	// log.DefaultLogger.Info("CallResource called")
 
+	client := d.client
+	defer client.Close()
+
 	if d.oauthPassThrough {
-		// join headers
 		headers := make(map[string]string)
 		for k, v := range req.Headers {
-			headers[k] = strings.Join(v, ",")
+			if strings.EqualFold(k, "Authorization") {
+				headers["Authorization"] = v[0]
+				break
+			}
 		}
-		err := d.SetOauthClient(ctx, headers)
+		oauthClient, err := d.CreateOauthClient(ctx, headers)
 		if err != nil {
 			return err
 		}
+
+		client = oauthClient
 	}
 
 	var body []byte
@@ -204,7 +212,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 			})
 		}
 	} else if resource == "projects" {
-		projects, err := d.client.ListProjects(ctx)
+		projects, err := client.ListProjects(ctx)
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing projects", "error", err)
 		}
@@ -220,7 +228,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		reqUrl, _ := url.Parse(req.URL)
 		params, _ := url.ParseQuery(reqUrl.RawQuery)
 
-		bucketNames, err := d.client.ListProjectBuckets(ctx, params.Get("ProjectId"))
+		bucketNames, err := client.ListProjectBuckets(ctx, params.Get("ProjectId"))
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing log buckets", "error", err)
 		}
@@ -236,7 +244,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		reqUrl, _ := url.Parse(req.URL)
 		params, _ := url.ParseQuery(reqUrl.RawQuery)
 
-		views, err := d.client.ListProjectBucketViews(ctx, params.Get("ProjectId"), params.Get("BucketId"))
+		views, err := client.ListProjectBucketViews(ctx, params.Get("ProjectId"), params.Get("BucketId"))
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing log views", "error", err)
 		}
@@ -267,12 +275,15 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 // contains Frames ([]*Frame).
 func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	// log.DefaultLogger.Info("QueryData called")
+	client := d.client
+	defer client.Close()
 
 	if d.oauthPassThrough {
-		err := d.SetOauthClient(ctx, req.Headers)
+		oauthClient, err := d.CreateOauthClient(ctx, req.Headers)
 		if err != nil {
 			return nil, err
 		}
+		client = oauthClient
 	}
 
 	// create response struct
@@ -280,7 +291,7 @@ func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.Que
 
 	// loop over queries and execute them individually.
 	for _, q := range req.Queries {
-		res := d.query(ctx, req.PluginContext, q)
+		res := d.query(ctx, req.PluginContext, q, client)
 
 		// save the response in a hashmap
 		// based on with RefID as identifier
@@ -299,7 +310,7 @@ type queryModel struct {
 	ViewId    string `json:"viewId"`
 }
 
-func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery) backend.DataResponse {
+func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginContext, query backend.DataQuery, client cloudlogging.API) backend.DataResponse {
 	response := backend.DataResponse{}
 
 	var q queryModel
@@ -329,7 +340,7 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 		},
 	}
 
-	logs, err := d.client.ListLogs(ctx, &clientRequest)
+	logs, err := client.ListLogs(ctx, &clientRequest)
 	if err != nil {
 		response.Error = fmt.Errorf("query: %w", err)
 		return response
@@ -372,11 +383,15 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.CheckHealthRequest) (*backend.CheckHealthResult, error) {
 	// log.DefaultLogger.Info("CheckHealth called")
 
+	client := d.client
+	defer client.Close()
+
 	if d.oauthPassThrough {
-		err := d.SetOauthClient(ctx, req.Headers)
+		oauthClient, err := d.CreateOauthClient(ctx, req.Headers)
 		if err != nil {
 			return nil, err
 		}
+		client = oauthClient
 	}
 
 	var status = backend.HealthStatusOk
@@ -400,7 +415,7 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 			Message: "Please define a default project for OAuth authentication",
 		}, nil
 	}
-	if err := d.client.TestConnection(ctx, conf.DefaultProject); err != nil {
+	if err := client.TestConnection(ctx, conf.DefaultProject); err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
 			Message: fmt.Sprintf("failed to run test query: %s", err),
@@ -413,11 +428,11 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 	}, nil
 }
 
-func (d *CloudLoggingDatasource) SetOauthClient(ctx context.Context, headers map[string]string) error {
+func (d *CloudLoggingDatasource) CreateOauthClient(ctx context.Context, headers map[string]string) (*cloudlogging.Client, error) {
 	client, err := cloudlogging.NewClientWithPassThrough(ctx, headers)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	d.client = client
-	return nil
+
+	return client, nil
 }

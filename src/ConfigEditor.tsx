@@ -14,10 +14,10 @@
  * limitations under the License.
  */
 
-import React, { PureComponent } from 'react';
 import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
 import { ConnectionConfig, GoogleAuthType } from '@grafana/google-sdk';
 import { Field, Label, SecretInput, Select } from '@grafana/ui';
+import React, { PureComponent } from 'react';
 import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData } from './types';
 
 export type Props = DataSourcePluginOptionsEditorProps<CloudLoggingOptions, DataSourceSecureJsonData>;
@@ -26,7 +26,6 @@ export class ConfigEditor extends PureComponent<Props> {
   state = {
     isChecked: this.props.options.jsonData.usingImpersonation || false,
     sa: this.props.options.jsonData.serviceAccountToImpersonate || '',
-    authenticationMethod: this.props.options.jsonData.authenticationType || GoogleAuthType.JWT,
   };
 
   render() {
