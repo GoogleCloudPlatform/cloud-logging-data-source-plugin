@@ -1,4 +1,8 @@
 # Changelog
+## 1.5.2 (2026-01-08)
+* Add OAuth Passthrough authentication support - allows users to authenticate using their Grafana Google OAuth token
+* Requires Grafana to be configured with Google authentication including the `https://www.googleapis.com/auth/logging.read` scope
+
 ## 1.5.1 (2025-08-14)
 * Added pagination to ListProjects
 
