@@ -193,3 +193,62 @@ func TestQueryData_SingleLog(t *testing.T) {
 	require.Equal(t, string(expectedFrame), string(serializedFrame))
 	client.AssertExpectations(t)
 }
+
+func TestNewCloudLoggingDatasource_OAuthPassthrough(t *testing.T) {
+	jsonData := `{"oauthPassThru": true, "authenticationType": "oauthPassthrough", "defaultProject": "test-project"}`
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(jsonData),
+	}
+
+	instance, err := NewCloudLoggingDatasource(context.Background(), settings)
+	require.NoError(t, err)
+	require.NotNil(t, instance)
+
+	ds, ok := instance.(*CloudLoggingDatasource)
+	require.True(t, ok)
+	require.True(t, ds.oauthPassThrough)
+	require.Nil(t, ds.client)
+}
+
+func TestCreateOauthClient_Success(t *testing.T) {
+	ds := &CloudLoggingDatasource{
+		oauthPassThrough: true,
+	}
+
+	headers := map[string]string{
+		"Authorization": "Bearer test-token-123",
+	}
+
+	client, err := ds.CreateOauthClient(context.Background(), headers)
+	require.NoError(t, err)
+	require.NotNil(t, client)
+	defer client.Close()
+}
+
+func TestCreateOauthClient_MissingAuthHeader(t *testing.T) {
+	ds := &CloudLoggingDatasource{
+		oauthPassThrough: true,
+	}
+
+	headers := map[string]string{}
+
+	client, err := ds.CreateOauthClient(context.Background(), headers)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "missing or invalid Authorization header")
+	require.Nil(t, client)
+}
+
+func TestCreateOauthClient_InvalidAuthHeader(t *testing.T) {
+	ds := &CloudLoggingDatasource{
+		oauthPassThrough: true,
+	}
+
+	headers := map[string]string{
+		"Authorization": "Basic invalid-auth",
+	}
+
+	client, err := ds.CreateOauthClient(context.Background(), headers)
+	require.Error(t, err)
+	require.ErrorContains(t, err, "missing or invalid Authorization header")
+	require.Nil(t, client)
+}

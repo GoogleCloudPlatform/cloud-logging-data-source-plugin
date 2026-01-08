@@ -172,7 +172,6 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 	// log.DefaultLogger.Info("CallResource called")
 
 	client := d.client
-	defer client.Close()
 
 	if d.oauthPassThrough {
 		headers := make(map[string]string)
@@ -188,6 +187,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		}
 
 		client = oauthClient
+		defer client.Close()
 	}
 
 	var body []byte
@@ -276,7 +276,6 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
 	// log.DefaultLogger.Info("QueryData called")
 	client := d.client
-	defer client.Close()
 
 	if d.oauthPassThrough {
 		oauthClient, err := d.CreateOauthClient(ctx, req.Headers)
@@ -284,6 +283,7 @@ func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.Que
 			return nil, err
 		}
 		client = oauthClient
+		defer client.Close()
 	}
 
 	// create response struct
@@ -384,7 +384,6 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 	// log.DefaultLogger.Info("CheckHealth called")
 
 	client := d.client
-	defer client.Close()
 
 	if d.oauthPassThrough {
 		oauthClient, err := d.CreateOauthClient(ctx, req.Headers)
@@ -392,6 +391,7 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 			return nil, err
 		}
 		client = oauthClient
+		defer client.Close()
 	}
 
 	var status = backend.HealthStatusOk
