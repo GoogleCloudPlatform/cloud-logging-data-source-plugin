@@ -185,6 +185,37 @@ func NewClientWithAccessToken(ctx context.Context, accessToken string) (*Client,
 	}, nil
 }
 
+// NewClientWithPassThrough creates a new Clients using Oauth browser credentials
+func NewClientWithPassThrough(ctx context.Context, headers map[string]string) (*Client, error) {
+	token, found := strings.CutPrefix(headers["Authorization"], "Bearer ")
+	if !found || token == "" {
+		return nil, errors.New("missing or invalid Authorization header")
+	}
+
+	oauthOpt := option.WithTokenSource(
+		oauth2.StaticTokenSource(&oauth2.Token{
+			AccessToken: token,
+		}),
+	)
+	client, err := logging.NewClient(ctx, oauthOpt, option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	rClient, err := resourcemanager.NewService(ctx, oauthOpt, option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	configClient, err := logging.NewConfigClient(ctx, oauthOpt, option.WithUserAgent("googlecloud-logging-datasource"))
+	if err != nil {
+		return nil, err
+	}
+	return &Client{
+		lClient:      client,
+		rClient:      rClient.Projects,
+		configClient: configClient,
+	}, nil
+}
+
 // Close closes the underlying connection to the GCP API
 func (c *Client) Close() error {
 	c.configClient.Close()
@@ -216,7 +247,7 @@ func (q *Query) String() string {
 func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
 	projectIDs := []string{}
 	pageToken := ""
-	
+
 	for {
 		call := c.rClient.List()
 		if pageToken != "" {
@@ -239,7 +270,7 @@ func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
 		}
 		pageToken = response.NextPageToken
 	}
-	
+
 	return projectIDs, nil
 }
 

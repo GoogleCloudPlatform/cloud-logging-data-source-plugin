@@ -14,11 +14,11 @@
  * limitations under the License.
  */
 
+import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
+import { ConnectionConfig, GoogleAuthType } from '@grafana/google-sdk';
+import { Field, Label, SecretInput, Select } from '@grafana/ui';
 import React, { PureComponent } from 'react';
-import { DataSourcePluginOptionsEditorProps } from '@grafana/data';
-import { ConnectionConfig } from '@grafana/google-sdk';
-import { Label, SecretInput } from '@grafana/ui';
-import { CloudLoggingOptions, DataSourceSecureJsonData } from './types';
+import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData } from './types';
 
 export type Props = DataSourcePluginOptionsEditorProps<CloudLoggingOptions, DataSourceSecureJsonData>;
 
@@ -28,87 +28,146 @@ export class ConfigEditor extends PureComponent<Props> {
     sa: this.props.options.jsonData.serviceAccountToImpersonate || '',
   };
 
-  handleClick = () => {
-    this.props.options.jsonData.usingImpersonation = !this.state.isChecked;
-    this.setState({
-      isChecked: !this.state.isChecked,
-    });
-  };
   render() {
     const { options, onOptionsChange } = this.props;
     const secureJsonData = options.secureJsonData || {};
 
+    const handleClick = () => {
+      const newImpersonationState = !this.state.isChecked;
+      onOptionsChange({
+        ...options,
+        jsonData: {
+          ...options.jsonData,
+          usingImpersonation: newImpersonationState,
+        },
+      });
+      this.setState({
+        isChecked: newImpersonationState,
+      });
+    };
+
+    const handleAuthTypeChange = (e: SelectableValue<string>) => {
+      if (e.value === 'oauthPassthrough') {
+        onOptionsChange({
+          ...options,
+          jsonData: {
+            ...options.jsonData,
+            authenticationType: 'oauthPassthrough' as GoogleAuthType,
+            oauthPassThru: true,
+          },
+        });
+      } else {
+        onOptionsChange({
+          ...options,
+          jsonData: {
+            ...options.jsonData,
+            authenticationType: (e.value as GoogleAuthType) || GoogleAuthType.JWT,
+            oauthPassThru: false,
+          },
+        });
+      }
+    };
+
     return (
       <>
-        <ConnectionConfig {...this.props}></ConnectionConfig>
-        <div>
-          <input type="checkbox" onChange={this.handleClick} checked={this.state.isChecked} /> To impersonate an
-          existing Google Cloud service account.
-          <div hidden={!this.state.isChecked}>
-            <Label>Service Account:</Label>
-            <input
-              size={60}
-              id="serviceAccount"
-              value={this.state.sa}
-              onChange={(e) => {
-                this.setState({ sa: e.target.value }, () => {
-                  this.props.options.jsonData.serviceAccountToImpersonate = this.state.sa;
-                });
-              }}
-            />
-          </div>
-          <div style={{ marginTop: '10px' }}>
-            <div className="gf-form-label__desc">
-              Alternatively, configure a temporary access token and a project ID. This will override other
-              authentication methods.
-            </div>
-            <div style={{ marginTop: '10px' }}>
-              <Label>Access Token</Label>
-              <SecretInput
-                value={secureJsonData.accessToken || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  onOptionsChange({
-                    ...options,
-                    secureJsonData: {
-                      ...secureJsonData,
-                      accessToken: e.target.value,
-                    },
-                  });
-                }}
-                isConfigured={!!options.secureJsonFields?.accessToken}
-                onReset={() => {
-                  onOptionsChange({
-                    ...options,
-                    secureJsonData: {
-                      ...secureJsonData,
-                      accessToken: '',
-                    },
-                    secureJsonFields: {
-                      ...options.secureJsonFields,
-                      accessToken: false,
-                    },
-                  });
-                }}
-              />
-            </div>
-            <div style={{ marginTop: '10px' }}>
-              <Label>Project ID</Label>
+        <Field
+          label={'Authentication'}
+          description={'Choose the type of authentication for Google Cloud Logging services'}
+          htmlFor="authentication-type"
+        >
+          <Select
+            width={30}
+            value={authTypes.find((opt) => opt.value === options.jsonData.authenticationType)}
+            options={authTypes}
+            onChange={handleAuthTypeChange}
+            disabled={false}
+          />
+        </Field>
+        {options.jsonData.authenticationType === GoogleAuthType.JWT ||
+        options.jsonData.authenticationType === GoogleAuthType.GCE ? (
+          <ConnectionConfig {...this.props}></ConnectionConfig>
+        ) : null}
+        {!options.jsonData.oauthPassThru ? (
+          <div>
+            <input type="checkbox" onChange={() => handleClick()} checked={this.state.isChecked} /> To impersonate an
+            existing Google Cloud service account.
+            <div hidden={!this.state.isChecked}>
+              <Label>Service Account:</Label>
               <input
-                value={options.jsonData.defaultProject || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                  onOptionsChange({
-                    ...options,
-                    jsonData: {
-                      ...options.jsonData,
-                      defaultProject: e.target.value,
-                    },
+                size={60}
+                id="serviceAccount"
+                value={this.state.sa}
+                onChange={(e) => {
+                  this.setState({ sa: e.target.value }, () => {
+                    this.props.options.jsonData.serviceAccountToImpersonate = this.state.sa;
                   });
                 }}
               />
             </div>
           </div>
-        </div>
+        ) : null}
+        {options.jsonData.authenticationType === ('accessToken' as GoogleAuthType) ? (
+          <div>
+            <div style={{ marginTop: '10px' }}>
+              <div className="gf-form-label__desc">
+                Alternatively, configure a temporary access token and a project ID. This will override other
+                authentication methods.
+              </div>
+              <div style={{ marginTop: '10px' }}>
+                <Label>Access Token</Label>
+                <SecretInput
+                  value={secureJsonData.accessToken || ''}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    onOptionsChange({
+                      ...options,
+                      secureJsonData: {
+                        ...secureJsonData,
+                        accessToken: e.target.value,
+                      },
+                    });
+                  }}
+                  isConfigured={!!options.secureJsonFields?.accessToken}
+                  onReset={() => {
+                    onOptionsChange({
+                      ...options,
+                      secureJsonData: {
+                        ...secureJsonData,
+                        accessToken: '',
+                      },
+                      secureJsonFields: {
+                        ...options.secureJsonFields,
+                        accessToken: false,
+                      },
+                    });
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        ) : null}
+        {defaultProject(this.props)}
       </>
     );
   }
 }
+
+const defaultProject = (props: Props) => {
+  const { options, onOptionsChange } = props;
+  return (
+    <div style={{ marginTop: '10px' }}>
+      <Label>Default Project ID (required for OAuth passthrough)</Label>
+      <input
+        value={options.jsonData.defaultProject || ''}
+        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+          onOptionsChange({
+            ...options,
+            jsonData: {
+              ...options.jsonData,
+              defaultProject: e.target.value,
+            },
+          });
+        }}
+      />
+    </div>
+  );
+};
