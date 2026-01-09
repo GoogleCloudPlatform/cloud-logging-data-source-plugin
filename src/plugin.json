@@ -10,7 +10,7 @@
   "logs": true,
   "executable": "gpx_gcp-logging",
   "info": {
-    "description": "",
+    "description": "A Grafana data source plugin for querying and visualizing logs from Google Cloud Logging.",
     "author": {
       "name": "GCP logging team",
       "url": "https://cloud.google.com/logging"
