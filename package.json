@@ -13,13 +13,14 @@
   "author": "Google Inc.",
   "license": "Apache-2.0",
   "devDependencies": {
-    "@types/lodash": "latest"
+    "@types/lodash": "latest",
+    "eslint-plugin-jsdoc": "^50.0.0"
   },
   "resolutions": {
     "rxjs": "7.3.0"
   },
   "engines": {
-    "node": ">=14"
+    "node": ">=20"
   },
   "dependencies": {
     "@grafana/data": "^9.0.2",
