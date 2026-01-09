@@ -14,10 +14,11 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@types/lodash": "latest",
-    "eslint-plugin-jsdoc": "^50.0.0"
+    "eslint-plugin-jsdoc": "^50.6.17"
   },
   "resolutions": {
-    "rxjs": "7.3.0"
+    "rxjs": "7.3.0",
+    "eslint-plugin-jsdoc": "^50.6.17"
   },
   "engines": {
     "node": ">=20"
