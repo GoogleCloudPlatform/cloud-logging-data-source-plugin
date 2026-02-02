@@ -13,7 +13,7 @@ require (
 	google.golang.org/api v0.229.0
 	google.golang.org/genproto v0.0.0-20250425173222-7b384671a197
 	google.golang.org/genproto/googleapis/api v0.0.0-20250425173222-7b384671a197
-	google.golang.org/protobuf v1.36.6
+	google.golang.org/protobuf v1.36.11
 )
 
 require (
