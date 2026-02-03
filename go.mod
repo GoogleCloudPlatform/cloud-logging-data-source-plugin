@@ -6,7 +6,7 @@ toolchain go1.24.2
 
 require (
 	cloud.google.com/go/logging v1.13.0
-	github.com/grafana/grafana-google-sdk-go v0.2.1
+	github.com/grafana/grafana-google-sdk-go v0.4.2
 	github.com/grafana/grafana-plugin-sdk-go v0.250.0
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/oauth2 v0.29.0
