@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # Stage 1: Build the application
-FROM golang:1.24.2-alpine AS buildbase
+FROM golang:1.26.0-alpine AS buildbase
 
 WORKDIR /app
 
