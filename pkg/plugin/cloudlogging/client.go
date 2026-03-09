@@ -23,9 +23,10 @@ import (
 	"time"
 
 	logging "cloud.google.com/go/logging/apiv2"
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"golang.org/x/oauth2"
-	resourcemanager "google.golang.org/api/cloudresourcemanager/v1"
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
@@ -61,7 +62,7 @@ type API interface {
 // to list projects, and a config client to get log bucket configurations
 type Client struct {
 	lClient      *logging.Client
-	rClient      *resourcemanager.ProjectsService
+	rClient      *resourcemanager.ProjectsClient
 	configClient *logging.ConfigClient
 }
 
@@ -72,7 +73,7 @@ func NewClient(ctx context.Context, jsonCreds []byte) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	rClient, err := resourcemanager.NewService(ctx, option.WithCredentialsJSON(jsonCreds),
+	rClient, err := resourcemanager.NewProjectsClient(ctx, option.WithCredentialsJSON(jsonCreds),
 		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
@@ -85,7 +86,7 @@ func NewClient(ctx context.Context, jsonCreds []byte) (*Client, error) {
 	}
 	return &Client{
 		lClient:      client,
-		rClient:      rClient.Projects,
+		rClient:      rClient,
 		configClient: configClient,
 	}, nil
 }
@@ -97,7 +98,7 @@ func NewClientWithGCE(ctx context.Context) (*Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	rClient, err := resourcemanager.NewService(ctx,
+	rClient, err := resourcemanager.NewProjectsClient(ctx,
 		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
@@ -109,7 +110,7 @@ func NewClientWithGCE(ctx context.Context) (*Client, error) {
 	}
 	return &Client{
 		lClient:      client,
-		rClient:      rClient.Projects,
+		rClient:      rClient,
 		configClient: configClient,
 	}, nil
 }
@@ -138,7 +139,7 @@ func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersona
 	if err != nil {
 		return nil, err
 	}
-	rClient, err := resourcemanager.NewService(ctx, option.WithTokenSource(ts),
+	rClient, err := resourcemanager.NewProjectsClient(ctx, option.WithTokenSource(ts),
 		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
@@ -150,7 +151,7 @@ func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersona
 	}
 	return &Client{
 		lClient:      client,
-		rClient:      rClient.Projects,
+		rClient:      rClient,
 		configClient: configClient,
 	}, nil
 }
@@ -166,7 +167,7 @@ func NewClientWithAccessToken(ctx context.Context, accessToken string) (*Client,
 		return nil, err
 	}
 
-	rClient, err := resourcemanager.NewService(ctx, option.WithTokenSource(ts),
+	rClient, err := resourcemanager.NewProjectsClient(ctx, option.WithTokenSource(ts),
 		option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
@@ -180,7 +181,7 @@ func NewClientWithAccessToken(ctx context.Context, accessToken string) (*Client,
 
 	return &Client{
 		lClient:      client,
-		rClient:      rClient.Projects,
+		rClient:      rClient,
 		configClient: configClient,
 	}, nil
 }
@@ -201,7 +202,7 @@ func NewClientWithPassThrough(ctx context.Context, headers map[string]string) (*
 	if err != nil {
 		return nil, err
 	}
-	rClient, err := resourcemanager.NewService(ctx, oauthOpt, option.WithUserAgent("googlecloud-logging-datasource"))
+	rClient, err := resourcemanager.NewProjectsClient(ctx, oauthOpt, option.WithUserAgent("googlecloud-logging-datasource"))
 	if err != nil {
 		return nil, err
 	}
@@ -211,13 +212,14 @@ func NewClientWithPassThrough(ctx context.Context, headers map[string]string) (*
 	}
 	return &Client{
 		lClient:      client,
-		rClient:      rClient.Projects,
+		rClient:      rClient,
 		configClient: configClient,
 	}, nil
 }
 
 // Close closes the underlying connection to the GCP API
 func (c *Client) Close() error {
+	c.rClient.Close()
 	c.configClient.Close()
 	return c.lClient.Close()
 }
@@ -246,31 +248,21 @@ func (q *Query) String() string {
 // ListProjects returns the project IDs of all visible projects
 func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
 	projectIDs := []string{}
-	pageToken := ""
-
+	req := &resourcemanagerpb.SearchProjectsRequest{}
+	it := c.rClient.SearchProjects(ctx, req)
 	for {
-		call := c.rClient.List()
-		if pageToken != "" {
-			call = call.PageToken(pageToken)
+		project, err := it.Next()
+		if err == iterator.Done {
+			break
 		}
-		response, err := call.Do()
 		if err != nil {
 			return nil, err
 		}
-		// Process projects from this page
-		for _, p := range response.Projects {
-			if p.LifecycleState == "DELETE_REQUESTED" || p.LifecycleState == "DELETE_IN_PROGRESS" {
-				continue
-			}
-			projectIDs = append(projectIDs, p.ProjectId)
+		if project.State != resourcemanagerpb.Project_ACTIVE {
+			continue
 		}
-		// Check if there are more pages
-		if response.NextPageToken == "" {
-			break
-		}
-		pageToken = response.NextPageToken
+		projectIDs = append(projectIDs, project.ProjectId)
 	}
-
 	return projectIDs, nil
 }
 

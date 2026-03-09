@@ -16,6 +16,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -207,7 +208,7 @@ func TestNewCloudLoggingDatasource_OAuthPassthrough(t *testing.T) {
 	ds, ok := instance.(*CloudLoggingDatasource)
 	require.True(t, ok)
 	// The assertion has been fixed.
-		require.Equal(t, true, ds.oauthPassThrough)
+	require.Equal(t, true, ds.oauthPassThrough)
 	require.Nil(t, ds.client)
 }
 
@@ -322,7 +323,7 @@ func TestNewCloudLoggingDatasource_AuthOverride(t *testing.T) {
 		inst, err := NewCloudLoggingDatasource(context.Background(), settings)
 		require.NoError(t, err)
 		require.NotNil(t, inst)
-		
+
 		ds := inst.(*CloudLoggingDatasource)
 		require.NotNil(t, ds.client)
 	})
@@ -340,9 +341,46 @@ func TestNewCloudLoggingDatasource_AuthOverride(t *testing.T) {
 		inst, err := NewCloudLoggingDatasource(context.Background(), settings)
 		require.NoError(t, err)
 		require.NotNil(t, inst)
-		
+
 		ds, ok := inst.(*CloudLoggingDatasource)
 		require.True(t, ok)
 		require.Equal(t, true, ds.oauthPassThrough)
 	})
+}
+
+// responseSender implements backend.CallResourceResponseSender for testing
+type responseSender struct {
+	resp *backend.CallResourceResponse
+}
+
+func (s *responseSender) Send(resp *backend.CallResourceResponse) error {
+	s.resp = resp
+	return nil
+}
+
+func TestCallResource_Projects(t *testing.T) {
+	expectedProjects := []string{"project-a", "project-b", "project-c", "project-d", "project-e"}
+
+	client := mocks.NewAPI(t)
+	client.On("ListProjects", mock.Anything).Return(expectedProjects, nil)
+
+	ds := &CloudLoggingDatasource{
+		client: client,
+	}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "projects",
+		URL:  "projects",
+	}, sender)
+
+	require.NoError(t, err)
+	require.NotNil(t, sender.resp)
+	require.Equal(t, 200, sender.resp.Status)
+
+	var projects []string
+	err = json.Unmarshal(sender.resp.Body, &projects)
+	require.NoError(t, err)
+	require.Equal(t, expectedProjects, projects)
+	client.AssertExpectations(t)
 }
