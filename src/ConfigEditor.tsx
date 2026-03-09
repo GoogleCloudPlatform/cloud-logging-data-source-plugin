@@ -92,7 +92,7 @@ export class ConfigEditor extends PureComponent<Props> {
           />
         </Field>
         {options.jsonData.authenticationType === GoogleAuthType.JWT ||
-        options.jsonData.authenticationType === GoogleAuthType.GCE ? (
+          options.jsonData.authenticationType === GoogleAuthType.GCE ? (
           <ConnectionConfig {...this.props}></ConnectionConfig>
         ) : null}
         {!options.jsonData.oauthPassThru ? (
@@ -166,6 +166,7 @@ const defaultProject = (props: Props) => {
     <div style={{ marginTop: '10px' }}>
       <Label>Default Project ID (required for OAuth passthrough)</Label>
       <input
+        autoComplete="off"
         value={options.jsonData.defaultProject || ''}
         onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
           onOptionsChange({
