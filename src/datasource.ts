@@ -33,6 +33,30 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   }
 
   /**
+   * Override testDatasource to sanitize errors that may contain raw HTML.
+   * When Grafana returns HTTP 502 for health checks, the GCP Load Balancer
+   * intercepts it and replaces the body with its own HTML 502 page. This
+   * override catches those errors and returns a readable message instead.
+   */
+  async testDatasource() {
+    try {
+      return await super.testDatasource();
+    } catch (err: unknown) {
+      const errObj = err as Record<string, unknown>;
+      // Grafana's backendSrv puts the HTTP response body in err.data
+      const raw = errObj?.['data'] ?? errObj?.['message'] ?? String(err);
+      const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
+      const isHtml = /<html[\s>]|<!doctype\s+html/i.test(text) || text.includes('text/html');
+      return {
+        status: 'error' as const,
+        message: isHtml
+          ? 'The server returned an HTML error page. If you set a Universe Domain, please verify it is correct.'
+          : text,
+      };
+    }
+  }
+
+  /**
    * Get the Project ID from GCE or we parsed from the data source's JWT token
    *
    * @returns Project ID

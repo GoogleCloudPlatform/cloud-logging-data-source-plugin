@@ -40,6 +40,7 @@ export interface DataSourceOptionsExt extends DataSourceOptions {
   serviceAccountToImpersonate?: string;
   usingImpersonation?: boolean;
   oauthPassThru?: boolean;
+  universeDomain?: string;
 }
 
 /**

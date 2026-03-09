@@ -16,6 +16,7 @@ package plugin
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -206,8 +207,25 @@ func TestNewCloudLoggingDatasource_OAuthPassthrough(t *testing.T) {
 
 	ds, ok := instance.(*CloudLoggingDatasource)
 	require.True(t, ok)
-	require.True(t, ds.oauthPassThrough)
+	// The assertion has been fixed.
+	require.Equal(t, true, ds.oauthPassThrough)
+	require.Equal(t, "", ds.universeDomain)
 	require.Nil(t, ds.client)
+}
+
+func TestNewCloudLoggingDatasource_UniverseDomain(t *testing.T) {
+	jsonData := `{"oauthPassThru": true, "authenticationType": "oauthPassthrough", "defaultProject": "test-project", "universeDomain": "my-custom-domain.com"}`
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(jsonData),
+	}
+
+	instance, err := NewCloudLoggingDatasource(context.Background(), settings)
+	require.NoError(t, err)
+	require.NotNil(t, instance)
+
+	ds, ok := instance.(*CloudLoggingDatasource)
+	require.True(t, ok)
+	require.Equal(t, "my-custom-domain.com", ds.universeDomain)
 }
 
 func TestCreateOauthClient_Success(t *testing.T) {
@@ -251,4 +269,158 @@ func TestCreateOauthClient_InvalidAuthHeader(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "missing or invalid Authorization header")
 	require.Nil(t, client)
+}
+
+// TestNewCloudLoggingDatasource_JWTPreferredOverLingeringAccessToken verifies
+// that when a user selects JWT auth and provides a privateKey, a lingering
+// accessToken in secureJsonData does NOT override the auth type (issue #151).
+func TestNewCloudLoggingDatasource_JWTPreferredOverLingeringAccessToken(t *testing.T) {
+	jsonData := `{"authenticationType": "jwt", "clientEmail": "test@test.iam.gserviceaccount.com", "defaultProject": "test-project", "tokenUri": "https://oauth2.googleapis.com/token"}`
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(jsonData),
+		DecryptedSecureJSONData: map[string]string{
+			"privateKey":  "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n",
+			"accessToken": "lingering-access-token",
+		},
+	}
+
+	// NewCloudLoggingDatasource will fail to create a real JWT client with
+	// a fake key, but the important assertion is that it does NOT fail with
+	// errMissingAccessToken — that would mean the access token override fired.
+	_, err := NewCloudLoggingDatasource(context.Background(), settings)
+	require.NotErrorIs(t, err, errMissingAccessToken, "JWT auth must be preferred over a lingering access token")
+}
+
+// TestNewCloudLoggingDatasource_AccessTokenFallbackWithoutPrivateKey verifies
+// backward compat: if authenticationType defaults to jwt but no privateKey is
+// present, a configured accessToken should still be used (pre-dropdown behavior).
+func TestNewCloudLoggingDatasource_AccessTokenFallbackWithoutPrivateKey(t *testing.T) {
+	jsonData := `{"authenticationType": "jwt", "defaultProject": "test-project"}`
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(jsonData),
+		DecryptedSecureJSONData: map[string]string{
+			"accessToken": "my-access-token",
+		},
+	}
+
+	instance, err := NewCloudLoggingDatasource(context.Background(), settings)
+	require.NoError(t, err)
+	require.NotNil(t, instance)
+}
+
+func TestNewCloudLoggingDatasource_AuthOverride(t *testing.T) {
+	// Test case 1: JWT auth type + Private Key + Access Token => Should use JWT
+	t.Run("JWT Auth with both private key and access token", func(t *testing.T) {
+		jsonData := `{"authenticationType": "jwt", "defaultProject": "test-project"}`
+		settings := backend.DataSourceInstanceSettings{
+			JSONData: []byte(jsonData),
+			DecryptedSecureJSONData: map[string]string{
+				privateKeyKey:  "dummy-private-key",
+				accessTokenKey: "dummy-access-token",
+			},
+		}
+
+		_, err := NewCloudLoggingDatasource(context.Background(), settings)
+		require.Error(t, err)
+		require.NotEqual(t, errMissingAccessToken, err)
+		require.Contains(t, err.Error(), "create client")
+	})
+
+	// Test case 2: JWT auth type + NO Private Key + Access Token => Should use Access Token
+	t.Run("JWT Auth with NO private key and access token", func(t *testing.T) {
+		jsonData := `{"authenticationType": "jwt", "defaultProject": "test-project"}`
+		settings := backend.DataSourceInstanceSettings{
+			JSONData: []byte(jsonData),
+			DecryptedSecureJSONData: map[string]string{
+				accessTokenKey: "dummy-access-token",
+			},
+		}
+
+		inst, err := NewCloudLoggingDatasource(context.Background(), settings)
+		require.NoError(t, err)
+		require.NotNil(t, inst)
+
+		ds := inst.(*CloudLoggingDatasource)
+		require.NotNil(t, ds.client)
+	})
+
+	// Test case 3: OAuth auth type + Access Token => Should use OAuth Passthrough
+	t.Run("OAuth Auth with lingering access token", func(t *testing.T) {
+		jsonData := `{"oauthPassThru": true, "authenticationType": "oauthPassthrough", "defaultProject": "test-project"}`
+		settings := backend.DataSourceInstanceSettings{
+			JSONData: []byte(jsonData),
+			DecryptedSecureJSONData: map[string]string{
+				accessTokenKey: "dummy-access-token",
+			},
+		}
+
+		inst, err := NewCloudLoggingDatasource(context.Background(), settings)
+		require.NoError(t, err)
+		require.NotNil(t, inst)
+
+		ds, ok := inst.(*CloudLoggingDatasource)
+		require.True(t, ok)
+		require.Equal(t, true, ds.oauthPassThrough)
+	})
+}
+
+// responseSender implements backend.CallResourceResponseSender for testing
+type responseSender struct {
+	resp *backend.CallResourceResponse
+}
+
+func (s *responseSender) Send(resp *backend.CallResourceResponse) error {
+	s.resp = resp
+	return nil
+}
+
+func TestCallResource_Projects(t *testing.T) {
+	expectedProjects := []string{"project-a", "project-b", "project-c", "project-d", "project-e"}
+
+	client := mocks.NewAPI(t)
+	client.On("ListProjects", mock.Anything).Return(expectedProjects, nil)
+
+	ds := &CloudLoggingDatasource{
+		client: client,
+	}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "projects",
+		URL:  "projects",
+	}, sender)
+
+	require.NoError(t, err)
+	require.NotNil(t, sender.resp)
+	require.Equal(t, 200, sender.resp.Status)
+
+	var projects []string
+	err = json.Unmarshal(sender.resp.Body, &projects)
+	require.NoError(t, err)
+	require.Equal(t, expectedProjects, projects)
+	client.AssertExpectations(t)
+}
+
+func TestSanitizeErrorMessage_HTML(t *testing.T) {
+	htmlErr := errors.New(`<html><head> <meta http-equiv="content-type" content="text/html;charset=utf-8"> <title>502 Server Error</title> </head> <body text=#000000 bgcolor=#ffffff> <h1>Error: Server Error</h1> <h2>The server encountered a temporary error and could not complete your request.<p>Please try again in 30 seconds.</h2> <h2></h2> </body></html>`)
+	result := sanitizeErrorMessage(htmlErr)
+	require.NotContains(t, result, "<html")
+	require.NotContains(t, result, "<h1>")
+	require.Contains(t, result, "Universe Domain")
+}
+
+func TestSanitizeErrorMessage_GRPCContentType(t *testing.T) {
+	// Simulate gRPC transport error that doesn't include the full HTML body
+	// but does mention the content-type text/html
+	grpcErr := errors.New(`rpc error: code = Unavailable desc = transport: received the unexpected content-type "text/html;charset=utf-8"`)
+	result := sanitizeErrorMessage(grpcErr)
+	require.NotContains(t, result, "text/html")
+	require.Contains(t, result, "Universe Domain")
+}
+
+func TestSanitizeErrorMessage_PlainText(t *testing.T) {
+	plainErr := errors.New("rpc error: code = NotFound desc = Requested entity was not found.")
+	result := sanitizeErrorMessage(plainErr)
+	require.Equal(t, "rpc error: code = NotFound desc = Requested entity was not found.", result)
+	require.NotContains(t, result, "Universe Domain")
 }
