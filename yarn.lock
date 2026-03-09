@@ -668,10 +668,10 @@
     ua-parser-js "^1.0.32"
     web-vitals "^3.1.1"
 
-"@grafana/google-sdk@^0.0.3":
-  version "0.0.3"
-  resolved "https://registry.yarnpkg.com/@grafana/google-sdk/-/google-sdk-0.0.3.tgz#09bfaf8049b1bdd1fe5ca980e8476150b86541dc"
-  integrity sha512-bhroulVPB0ntL6reSn4w6zyumwiV5y9VjaL41ht1omKGjziGmwtIsAjiMRaGpQluT+R1ya8ononADBBicKeT3g==
+"@grafana/google-sdk@^0.4.0":
+  version "0.4.1"
+  resolved "https://registry.yarnpkg.com/@grafana/google-sdk/-/google-sdk-0.4.1.tgz#899b691ea1936b60ada085f06bfce29992ca13af"
+  integrity sha512-1YB+b88nih7pOtKEp8GbVlE6GGihWqbgYpoJZEfOk69H1OkENJwxyeqxBU/W+YD3b62lkDzI0jJOGvLDZwlzQg==
 
 "@grafana/i18n@^12.4.0":
   version "12.4.0"
