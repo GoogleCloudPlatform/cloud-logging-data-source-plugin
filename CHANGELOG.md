@@ -1,4 +1,13 @@
 # Changelog
+## 1.6.0 (2026-03-09)
+* Fix authentication bug where access token auth could fail (#151)
+* Fix project dropdown only showing limited results (#144)
+* Sanitize HTML error messages for invalid universe domain configuration
+* Narrow HTML detection regex to avoid false positives from Go error messages
+* Disable browser autocomplete on sensitive configuration fields
+* Update build tooling from grafana-toolkit
+* Update OpenTelemetry SDK and other dependencies
+
 ## 1.5.2 (2026-01-08)
 * Add OAuth Passthrough authentication support - allows users to authenticate using their Grafana Google OAuth token
 * Requires Grafana to be configured with Google authentication including the `https://www.googleapis.com/auth/logging.read` scope
