@@ -94,7 +94,7 @@ func TestGetLogEntryMessage(t *testing.T) {
 				},
 			},
 			expected: &expectedResult{
-				message: "{\"database_role\":\"user\", \"severity\":\"INFO\"}",
+				message: "{\"database_role\":\"user\",\"severity\":\"INFO\"}",
 			},
 		},
 		{
@@ -161,7 +161,7 @@ func TestGetLogEntryMessage(t *testing.T) {
 				},
 			},
 			expected: &expectedResult{
-				message: "{\"code\":123, \"text\":\"nested message\"}",
+				message: "{\"code\":123,\"text\":\"nested message\"}",
 			},
 		},
 	}
