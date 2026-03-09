@@ -400,3 +400,27 @@ func TestCallResource_Projects(t *testing.T) {
 	require.Equal(t, expectedProjects, projects)
 	client.AssertExpectations(t)
 }
+
+func TestSanitizeErrorMessage_HTML(t *testing.T) {
+	htmlErr := errors.New(`<html><head> <meta http-equiv="content-type" content="text/html;charset=utf-8"> <title>502 Server Error</title> </head> <body text=#000000 bgcolor=#ffffff> <h1>Error: Server Error</h1> <h2>The server encountered a temporary error and could not complete your request.<p>Please try again in 30 seconds.</h2> <h2></h2> </body></html>`)
+	result := sanitizeErrorMessage(htmlErr)
+	require.NotContains(t, result, "<html")
+	require.NotContains(t, result, "<h1>")
+	require.Contains(t, result, "Universe Domain")
+}
+
+func TestSanitizeErrorMessage_GRPCContentType(t *testing.T) {
+	// Simulate gRPC transport error that doesn't include the full HTML body
+	// but does mention the content-type text/html
+	grpcErr := errors.New(`rpc error: code = Unavailable desc = transport: received the unexpected content-type "text/html;charset=utf-8"`)
+	result := sanitizeErrorMessage(grpcErr)
+	require.NotContains(t, result, "text/html")
+	require.Contains(t, result, "Universe Domain")
+}
+
+func TestSanitizeErrorMessage_PlainText(t *testing.T) {
+	plainErr := errors.New("rpc error: code = NotFound desc = Requested entity was not found.")
+	result := sanitizeErrorMessage(plainErr)
+	require.Equal(t, "rpc error: code = NotFound desc = Requested entity was not found.", result)
+	require.NotContains(t, result, "Universe Domain")
+}

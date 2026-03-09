@@ -50,6 +50,22 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   }
 
 
+  const [fetchError, setFetchError] = useState<string | undefined>();
+
+  /**
+   * Sanitize fetch errors — Grafana's backendSrv may include raw HTML bodies
+   * from proxy/universe-domain errors in err.data or err.message.
+   */
+  const sanitizeFetchError = (err: unknown): string => {
+    const raw = (err as any)?.data ?? (err as any)?.message ?? String(err);
+    const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
+    // Detect HTML content (full page or gRPC content-type error)
+    if (/<[a-z/!][^>]*>/i.test(text) || text.includes('text/html')) {
+      return 'The server returned an HTML error page. If you have configured a Universe Domain, please verify it is correct.';
+    }
+    return text;
+  };
+
   const [projects, setProjects] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
     datasource.getProjects().then(res => {
@@ -57,7 +73,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         label: project,
         value: project,
       })));
-    });
+      setFetchError(undefined);
+    }).catch(err => setFetchError(sanitizeFetchError(err)));
   }, [datasource]);
 
   const [buckets, setBuckets] = useState<Array<SelectableValue<string>>>();
@@ -70,7 +87,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
             label: bucket,
             value: bucket,
           })));
-        });
+        }).catch(err => setFetchError(sanitizeFetchError(err)));
       });
     } else if (!query.projectId.startsWith('$')) {
       datasource.getLogBuckets(query.projectId).then(res => {
@@ -78,7 +95,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
           label: bucket,
           value: bucket,
         })));
-      });
+        setFetchError(undefined);
+      }).catch(err => setFetchError(sanitizeFetchError(err)));
     }
   }, [datasource, query]);
 
@@ -86,66 +104,67 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   useEffect(() => {
     const bid = query.bucketId ? query.bucketId : "global/buckets/_Default";
     if (!bid.startsWith('$')) {
-        datasource.getLogBucketViews(query.projectId, `${bid}`).then(res => {
-            setViews(res.map(view => ({
-              label: view,
-              value: view,
-            })));
-        });
+      datasource.getLogBucketViews(query.projectId, `${bid}`).then(res => {
+        setViews(res.map(view => ({
+          label: view,
+          value: view,
+        })));
+        setFetchError(undefined);
+      }).catch(err => setFetchError(sanitizeFetchError(err)));
     }
   }, [datasource, query]);
 
   /**
    * Keep an up-to-date URI that links to the equivalent query in the GCP console
    */
-    const gcpConsoleURI = useMemo<string | undefined>(() => {
+  const gcpConsoleURI = useMemo<string | undefined>(() => {
     if (!query.queryText) {
       return undefined;
     }
 
     let storageScope = "";
     if (query.projectId) {
-        let scopePath = `storage,projects/${query.projectId}`;
-    
-        if (query.bucketId) {
-            // Check if bucketId already includes 'locations/' prefix
-            if (query.bucketId.startsWith('locations/')) {
-                scopePath += `/${query.bucketId}`;
-            } else {
-                scopePath += `/locations/${query.bucketId}`;
-            }
+      let scopePath = `storage,projects/${query.projectId}`;
+
+      if (query.bucketId) {
+        // Check if bucketId already includes 'locations/' prefix
+        if (query.bucketId.startsWith('locations/')) {
+          scopePath += `/${query.bucketId}`;
         } else {
-            scopePath += `/locations/global/buckets/_Default`;
+          scopePath += `/locations/${query.bucketId}`;
         }
-        if (query.viewId) {
-            scopePath += `/views/${query.viewId}`;
-        } else {
-            scopePath += `/views/_AllLogs`;
-        }
-        
-        // URL encode the forward slashes in the storage scope
-        storageScope = `;storageScope=${scopePath.replace(/\//g, '%2F')}`;
+      } else {
+        scopePath += `/locations/global/buckets/_Default`;
+      }
+      if (query.viewId) {
+        scopePath += `/views/${query.viewId}`;
+      } else {
+        scopePath += `/views/_AllLogs`;
+      }
+
+      // URL encode the forward slashes in the storage scope
+      storageScope = `;storageScope=${scopePath.replace(/\//g, '%2F')}`;
     }
 
-    const encodedText = encodeURIComponent(`${query.queryText}`).replace(/[!'()*]/g, function(c) {
-        if (c === '(' || c === ')') {
-          return '%25' + c.charCodeAt(0).toString(16);
-        }
-        return '%' + c.charCodeAt(0).toString(16);
+    const encodedText = encodeURIComponent(`${query.queryText}`).replace(/[!'()*]/g, function (c) {
+      if (c === '(' || c === ')') {
+        return '%25' + c.charCodeAt(0).toString(16);
+      }
+      return '%' + c.charCodeAt(0).toString(16);
     });
-    
+
     // Build query string parameters
     let queryParams = [`project=${query.projectId}`, `query=${encodedText}`];
-    
+
     // Add storageScope without the semicolon prefix
     if (storageScope) {
-        queryParams.push(storageScope.substring(1)); // Remove the leading semicolon
+      queryParams.push(storageScope.substring(1)); // Remove the leading semicolon
     }
-    
+
     // Add time parameters
     if (range !== undefined) {
-        queryParams.push(`startTime=${range?.from?.toISOString()}`);
-        queryParams.push(`endTime=${range?.to?.toISOString()}`);
+      queryParams.push(`startTime=${range?.from?.toISOString()}`);
+      queryParams.push(`endTime=${range?.to?.toISOString()}`);
     }
 
     return `https://console.cloud.google.com/logs/query?${queryParams.join('&')}`;
@@ -203,6 +222,11 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
           />
         </InlineField>
       </InlineFieldRow>
+      {fetchError && (
+        <div style={{ color: 'rgb(224, 93, 93)', marginBottom: '8px', padding: '8px', border: '1px solid rgb(224, 93, 93)', borderRadius: '4px', background: 'rgba(224, 93, 93, 0.1)' }}>
+          ⚠️ {fetchError}
+        </div>
+      )}
       <TextArea
         name="Query"
         className="slate-query-field"
@@ -215,6 +239,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
           queryText: e.currentTarget.value,
         })}
         onKeyDown={onKeyDown}
+        onPointerEnterCapture={undefined}
+        onPointerLeaveCapture={undefined}
       />
       <Tooltip content='Click to view these results in the Google Cloud console'>
         <LinkButton

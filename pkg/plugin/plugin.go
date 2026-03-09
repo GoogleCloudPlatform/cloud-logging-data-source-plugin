@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -89,7 +90,7 @@ type serviceAccountJSON struct {
 func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	var conf config
 	if err := json.Unmarshal(settings.JSONData, &conf); err != nil {
-		return nil, fmt.Errorf("unmarshal: %w", err)
+		return nil, fmt.Errorf("unmarshal: %s", sanitizeErrorMessage(err))
 	}
 
 	if conf.AuthType == "" {
@@ -123,7 +124,7 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 
 		serviceAccount, err := conf.toServiceAccountJSON(privateKey)
 		if err != nil {
-			return nil, fmt.Errorf("create credentials: %w", err)
+			return nil, fmt.Errorf("create credentials: %s", sanitizeErrorMessage(err))
 		}
 
 		if conf.UsingImpersonation {
@@ -150,7 +151,7 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 	}
 
 	if client_err != nil {
-		return nil, fmt.Errorf("create client: %w", client_err)
+		return nil, fmt.Errorf("create client: %s", sanitizeErrorMessage(client_err))
 	}
 
 	return &CloudLoggingDatasource{
@@ -196,7 +197,10 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		}
 		oauthClient, err := d.CreateOauthClient(ctx, headers)
 		if err != nil {
-			return err
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadGateway,
+				Body:   []byte(sanitizeErrorMessage(err)),
+			})
 		}
 
 		client = oauthClient
@@ -216,6 +220,10 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		proj, err := utils.GCEDefaultProject(ctx, "")
 		if err != nil {
 			log.DefaultLogger.Warn("problem getting GCE default project", "error", err)
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadGateway,
+				Body:   []byte(sanitizeErrorMessage(err)),
+			})
 		}
 		body, err = json.Marshal(proj)
 		if err != nil {
@@ -228,6 +236,10 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		projects, err := client.ListProjects(ctx)
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing projects", "error", err)
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadGateway,
+				Body:   []byte(sanitizeErrorMessage(err)),
+			})
 		}
 
 		body, err = json.Marshal(projects)
@@ -244,6 +256,10 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		bucketNames, err := client.ListProjectBuckets(ctx, params.Get("ProjectId"))
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing log buckets", "error", err)
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadGateway,
+				Body:   []byte(sanitizeErrorMessage(err)),
+			})
 		}
 
 		body, err = json.Marshal(bucketNames)
@@ -260,6 +276,10 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		views, err := client.ListProjectBucketViews(ctx, params.Get("ProjectId"), params.Get("BucketId"))
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing log views", "error", err)
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadGateway,
+				Body:   []byte(sanitizeErrorMessage(err)),
+			})
 		}
 
 		body, err = json.Marshal(views)
@@ -293,7 +313,13 @@ func (d *CloudLoggingDatasource) QueryData(ctx context.Context, req *backend.Que
 	if d.oauthPassThrough {
 		oauthClient, err := d.CreateOauthClient(ctx, req.Headers)
 		if err != nil {
-			return nil, err
+			response := backend.NewQueryDataResponse()
+			for _, q := range req.Queries {
+				response.Responses[q.RefID] = backend.DataResponse{
+					Error: fmt.Errorf("%s", sanitizeErrorMessage(err)),
+				}
+			}
+			return response, nil
 		}
 		client = oauthClient
 		defer client.Close()
@@ -355,7 +381,7 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 
 	logs, err := client.ListLogs(ctx, &clientRequest)
 	if err != nil {
-		response.Error = fmt.Errorf("query: %w", err)
+		response.Error = fmt.Errorf("query: %s", sanitizeErrorMessage(err))
 		return response
 	}
 
@@ -401,7 +427,10 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 	if d.oauthPassThrough {
 		oauthClient, err := d.CreateOauthClient(ctx, req.Headers)
 		if err != nil {
-			return nil, err
+			return &backend.CheckHealthResult{
+				Status:  backend.HealthStatusError,
+				Message: sanitizeErrorMessage(err),
+			}, nil
 		}
 		client = oauthClient
 		defer client.Close()
@@ -412,13 +441,19 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 
 	var conf config
 	if err := json.Unmarshal(settings.JSONData, &conf); err != nil {
-		return nil, fmt.Errorf("unmarshal: %w", err)
+		return &backend.CheckHealthResult{
+			Status:  backend.HealthStatusError,
+			Message: fmt.Sprintf("failed to parse configuration: %s", sanitizeErrorMessage(err)),
+		}, nil
 	}
 
 	if conf.DefaultProject == "" && conf.AuthType == gceAuthentication {
 		proj, err := utils.GCEDefaultProject(ctx, "")
 		if err != nil {
-			return nil, fmt.Errorf("failed to get GCE default project: %w", err)
+			return &backend.CheckHealthResult{
+				Status:  backend.HealthStatusError,
+				Message: fmt.Sprintf("failed to get GCE default project: %s", sanitizeErrorMessage(err)),
+			}, nil
 		}
 		conf.DefaultProject = proj
 	}
@@ -431,7 +466,7 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 	if err := client.TestConnection(ctx, conf.DefaultProject); err != nil {
 		return &backend.CheckHealthResult{
 			Status:  backend.HealthStatusError,
-			Message: fmt.Sprintf("failed to run test query: %s", err),
+			Message: fmt.Sprintf("failed to run test query: %s", sanitizeErrorMessage(err)),
 		}, nil
 	}
 
@@ -441,10 +476,26 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 	}, nil
 }
 
+// htmlLikePattern matches error strings that contain HTML markup or HTML content-type headers.
+var htmlLikePattern = regexp.MustCompile(`(?i)<[a-z/!][^>]*>|text/html`)
+
+// sanitizeErrorMessage cleans up raw error messages that may contain HTML
+// (e.g. from an incorrect universe domain returning a 502 HTML page). It
+// handles both the case where the full HTML page is embedded in the error and
+// the case where only the content-type is mentioned (gRPC transport errors).
+func sanitizeErrorMessage(err error) string {
+	msg := err.Error()
+	if !htmlLikePattern.MatchString(msg) {
+		return msg
+	}
+	return "The server returned an HTML error page instead of a valid API response. " +
+		"If you have configured a Universe Domain, please verify it is correct."
+}
+
 func (d *CloudLoggingDatasource) CreateOauthClient(ctx context.Context, headers map[string]string) (*cloudlogging.Client, error) {
 	client, err := cloudlogging.NewClientWithPassThrough(ctx, headers, d.universeDomain)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create oauth client: %s", sanitizeErrorMessage(err))
 	}
 
 	return client, nil
