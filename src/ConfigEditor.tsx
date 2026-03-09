@@ -149,6 +149,8 @@ export class ConfigEditor extends PureComponent<Props> {
                       },
                     });
                   }}
+                  onPointerEnterCapture={undefined}
+                  onPointerLeaveCapture={undefined}
                 />
               </div>
             </div>
@@ -163,21 +165,40 @@ export class ConfigEditor extends PureComponent<Props> {
 const defaultProject = (props: Props) => {
   const { options, onOptionsChange } = props;
   return (
-    <div style={{ marginTop: '10px' }}>
-      <Label>Default Project ID (required for OAuth passthrough)</Label>
-      <input
-        autoComplete="off"
-        value={options.jsonData.defaultProject || ''}
-        onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-          onOptionsChange({
-            ...options,
-            jsonData: {
-              ...options.jsonData,
-              defaultProject: e.target.value,
-            },
-          });
-        }}
-      />
-    </div>
+    <>
+      <div style={{ marginTop: '10px' }}>
+        <Label>Default Project ID (required for OAuth passthrough)</Label>
+        <input
+          autoComplete="off"
+          value={options.jsonData.defaultProject || ''}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            onOptionsChange({
+              ...options,
+              jsonData: {
+                ...options.jsonData,
+                defaultProject: e.target.value,
+              },
+            });
+          }}
+        />
+      </div>
+      <div style={{ marginTop: '10px' }}>
+        <Label>Universe Domain (optional)</Label>
+        <input
+          autoComplete="off"
+          placeholder="googleapis.com (default)"
+          value={options.jsonData.universeDomain || ''}
+          onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+            onOptionsChange({
+              ...options,
+              jsonData: {
+                ...options.jsonData,
+                universeDomain: e.target.value,
+              },
+            });
+          }}
+        />
+      </div>
+    </>
   );
 };

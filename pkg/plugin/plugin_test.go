@@ -209,7 +209,23 @@ func TestNewCloudLoggingDatasource_OAuthPassthrough(t *testing.T) {
 	require.True(t, ok)
 	// The assertion has been fixed.
 	require.Equal(t, true, ds.oauthPassThrough)
+	require.Equal(t, "", ds.universeDomain)
 	require.Nil(t, ds.client)
+}
+
+func TestNewCloudLoggingDatasource_UniverseDomain(t *testing.T) {
+	jsonData := `{"oauthPassThru": true, "authenticationType": "oauthPassthrough", "defaultProject": "test-project", "universeDomain": "my-custom-domain.com"}`
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(jsonData),
+	}
+
+	instance, err := NewCloudLoggingDatasource(context.Background(), settings)
+	require.NoError(t, err)
+	require.NotNil(t, instance)
+
+	ds, ok := instance.(*CloudLoggingDatasource)
+	require.True(t, ok)
+	require.Equal(t, "my-custom-domain.com", ds.universeDomain)
 }
 
 func TestCreateOauthClient_Success(t *testing.T) {

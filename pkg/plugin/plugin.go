@@ -59,27 +59,30 @@ type config struct {
 	ServiceAccountToImpersonate string `json:"serviceAccountToImpersonate"`
 	UsingImpersonation          bool   `json:"usingImpersonation"`
 	OAuthPassThru               bool   `json:"oauthPassThru"`
+	UniverseDomain              string `json:"universeDomain"`
 }
 
 // toServiceAccountJSON creates the serviceAccountJSON bytes from the config fields
 func (c config) toServiceAccountJSON(privateKey string) ([]byte, error) {
 	return json.Marshal(serviceAccountJSON{
-		Type:        "service_account",
-		ProjectID:   c.DefaultProject,
-		PrivateKey:  privateKey,
-		ClientEmail: c.ClientEmail,
-		TokenURI:    c.TokenURI,
+		Type:           "service_account",
+		ProjectID:      c.DefaultProject,
+		PrivateKey:     privateKey,
+		ClientEmail:    c.ClientEmail,
+		TokenURI:       c.TokenURI,
+		UniverseDomain: c.UniverseDomain,
 	})
 }
 
 // serviceAccountJSON is the expected structure of a GCP Service Account credentials file
 // We mainly want to be able to pull out ProjectID to use as a default
 type serviceAccountJSON struct {
-	Type        string `json:"type"`
-	ProjectID   string `json:"project_id"`
-	PrivateKey  string `json:"private_key"`
-	ClientEmail string `json:"client_email"`
-	TokenURI    string `json:"token_uri"`
+	Type           string `json:"type"`
+	ProjectID      string `json:"project_id"`
+	PrivateKey     string `json:"private_key"`
+	ClientEmail    string `json:"client_email"`
+	TokenURI       string `json:"token_uri"`
+	UniverseDomain string `json:"universe_domain,omitempty"`
 }
 
 // NewCloudLoggingDatasource creates a new datasource instance.
@@ -124,22 +127,22 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		}
 
 		if conf.UsingImpersonation {
-			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), serviceAccount, conf.ServiceAccountToImpersonate)
+			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), serviceAccount, conf.ServiceAccountToImpersonate, conf.UniverseDomain)
 		} else {
-			client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount)
+			client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount, conf.UniverseDomain)
 		}
 	case gceAuthentication:
 		if conf.UsingImpersonation {
-			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), nil, conf.ServiceAccountToImpersonate)
+			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), nil, conf.ServiceAccountToImpersonate, conf.UniverseDomain)
 		} else {
-			client, client_err = cloudlogging.NewClientWithGCE(context.TODO())
+			client, client_err = cloudlogging.NewClientWithGCE(context.TODO(), conf.UniverseDomain)
 		}
 	case accessTokenAuthentication:
 		accessToken, ok := settings.DecryptedSecureJSONData[accessTokenKey]
 		if !ok || accessToken == "" {
 			return nil, errMissingAccessToken
 		}
-		client, client_err = cloudlogging.NewClientWithAccessToken(context.TODO(), accessToken)
+		client, client_err = cloudlogging.NewClientWithAccessToken(context.TODO(), accessToken, conf.UniverseDomain)
 	case oauthpassthroughAuthentication:
 		oauthPassThrough = true
 	default:
@@ -153,6 +156,7 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 	return &CloudLoggingDatasource{
 		client:           client,
 		oauthPassThrough: oauthPassThrough,
+		universeDomain:   conf.UniverseDomain,
 	}, nil
 }
 
@@ -161,6 +165,7 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 type CloudLoggingDatasource struct {
 	client           cloudlogging.API
 	oauthPassThrough bool
+	universeDomain   string
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
@@ -437,7 +442,7 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 }
 
 func (d *CloudLoggingDatasource) CreateOauthClient(ctx context.Context, headers map[string]string) (*cloudlogging.Client, error) {
-	client, err := cloudlogging.NewClientWithPassThrough(ctx, headers)
+	client, err := cloudlogging.NewClientWithPassThrough(ctx, headers, d.universeDomain)
 	if err != nil {
 		return nil, err
 	}
