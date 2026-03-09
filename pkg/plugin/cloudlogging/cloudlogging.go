@@ -37,14 +37,16 @@ func GetLogEntryMessage(entry *loggingpb.LogEntry) (string, error) {
 			msg_val := msg.GetStringValue()
 			if msg_val == "" {
 				// If the message field is empty, we try to marshal the entire message field
-				msg_byte_val, err := msg.MarshalJSON()
+				// Use encoding/json via AsInterface() for deterministic output
+				msg_byte_val, err := json.Marshal(msg.AsInterface())
 				if err == nil {
 					return string(msg_byte_val), nil
 				}
 			}
 			return msg_val, nil
 		}
-		byteArr, err := t.JsonPayload.MarshalJSON()
+		// Use encoding/json via AsMap() for deterministic output across Go versions
+		byteArr, err := json.Marshal(t.JsonPayload.AsMap())
 		if err != nil {
 			return "", fmt.Errorf("failed to marshal JSON payload: %v", err)
 		}
