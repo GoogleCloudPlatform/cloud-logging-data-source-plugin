@@ -93,9 +93,17 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		conf.AuthType = jwtAuthentication
 	}
 
-	// Check if access token is configured and switch auth type if present
-	if accessToken, ok := settings.DecryptedSecureJSONData[accessTokenKey]; ok && accessToken != "" {
-		conf.AuthType = accessTokenAuthentication
+	// Only auto-switch to accessToken if the auth type is jwt (the default) and
+	// no JWT private key was provided. This preserves backward compat for
+	// pre-dropdown users (v1.5.0) who only set an access token, without hijacking
+	// explicitly-chosen auth types like GCE or OAuth.
+	if conf.AuthType == jwtAuthentication {
+		if accessToken, ok := settings.DecryptedSecureJSONData[accessTokenKey]; ok && accessToken != "" {
+			privateKey, hasKey := settings.DecryptedSecureJSONData[privateKeyKey]
+			if !hasKey || privateKey == "" {
+				conf.AuthType = accessTokenAuthentication
+			}
+		}
 	}
 
 	oauthPassThrough := false

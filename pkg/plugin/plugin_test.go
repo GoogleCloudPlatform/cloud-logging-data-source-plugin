@@ -206,7 +206,8 @@ func TestNewCloudLoggingDatasource_OAuthPassthrough(t *testing.T) {
 
 	ds, ok := instance.(*CloudLoggingDatasource)
 	require.True(t, ok)
-	require.True(t, ds.oauthPassThrough)
+	// The assertion has been fixed.
+		require.Equal(t, true, ds.oauthPassThrough)
 	require.Nil(t, ds.client)
 }
 
@@ -251,4 +252,97 @@ func TestCreateOauthClient_InvalidAuthHeader(t *testing.T) {
 	require.Error(t, err)
 	require.ErrorContains(t, err, "missing or invalid Authorization header")
 	require.Nil(t, client)
+}
+
+// TestNewCloudLoggingDatasource_JWTPreferredOverLingeringAccessToken verifies
+// that when a user selects JWT auth and provides a privateKey, a lingering
+// accessToken in secureJsonData does NOT override the auth type (issue #151).
+func TestNewCloudLoggingDatasource_JWTPreferredOverLingeringAccessToken(t *testing.T) {
+	jsonData := `{"authenticationType": "jwt", "clientEmail": "test@test.iam.gserviceaccount.com", "defaultProject": "test-project", "tokenUri": "https://oauth2.googleapis.com/token"}`
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(jsonData),
+		DecryptedSecureJSONData: map[string]string{
+			"privateKey":  "-----BEGIN RSA PRIVATE KEY-----\ntest\n-----END RSA PRIVATE KEY-----\n",
+			"accessToken": "lingering-access-token",
+		},
+	}
+
+	// NewCloudLoggingDatasource will fail to create a real JWT client with
+	// a fake key, but the important assertion is that it does NOT fail with
+	// errMissingAccessToken — that would mean the access token override fired.
+	_, err := NewCloudLoggingDatasource(context.Background(), settings)
+	require.NotErrorIs(t, err, errMissingAccessToken, "JWT auth must be preferred over a lingering access token")
+}
+
+// TestNewCloudLoggingDatasource_AccessTokenFallbackWithoutPrivateKey verifies
+// backward compat: if authenticationType defaults to jwt but no privateKey is
+// present, a configured accessToken should still be used (pre-dropdown behavior).
+func TestNewCloudLoggingDatasource_AccessTokenFallbackWithoutPrivateKey(t *testing.T) {
+	jsonData := `{"authenticationType": "jwt", "defaultProject": "test-project"}`
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(jsonData),
+		DecryptedSecureJSONData: map[string]string{
+			"accessToken": "my-access-token",
+		},
+	}
+
+	instance, err := NewCloudLoggingDatasource(context.Background(), settings)
+	require.NoError(t, err)
+	require.NotNil(t, instance)
+}
+
+func TestNewCloudLoggingDatasource_AuthOverride(t *testing.T) {
+	// Test case 1: JWT auth type + Private Key + Access Token => Should use JWT
+	t.Run("JWT Auth with both private key and access token", func(t *testing.T) {
+		jsonData := `{"authenticationType": "jwt", "defaultProject": "test-project"}`
+		settings := backend.DataSourceInstanceSettings{
+			JSONData: []byte(jsonData),
+			DecryptedSecureJSONData: map[string]string{
+				privateKeyKey:  "dummy-private-key",
+				accessTokenKey: "dummy-access-token",
+			},
+		}
+
+		_, err := NewCloudLoggingDatasource(context.Background(), settings)
+		require.Error(t, err)
+		require.NotEqual(t, errMissingAccessToken, err)
+		require.Contains(t, err.Error(), "create client")
+	})
+
+	// Test case 2: JWT auth type + NO Private Key + Access Token => Should use Access Token
+	t.Run("JWT Auth with NO private key and access token", func(t *testing.T) {
+		jsonData := `{"authenticationType": "jwt", "defaultProject": "test-project"}`
+		settings := backend.DataSourceInstanceSettings{
+			JSONData: []byte(jsonData),
+			DecryptedSecureJSONData: map[string]string{
+				accessTokenKey: "dummy-access-token",
+			},
+		}
+
+		inst, err := NewCloudLoggingDatasource(context.Background(), settings)
+		require.NoError(t, err)
+		require.NotNil(t, inst)
+		
+		ds := inst.(*CloudLoggingDatasource)
+		require.NotNil(t, ds.client)
+	})
+
+	// Test case 3: OAuth auth type + Access Token => Should use OAuth Passthrough
+	t.Run("OAuth Auth with lingering access token", func(t *testing.T) {
+		jsonData := `{"oauthPassThru": true, "authenticationType": "oauthPassthrough", "defaultProject": "test-project"}`
+		settings := backend.DataSourceInstanceSettings{
+			JSONData: []byte(jsonData),
+			DecryptedSecureJSONData: map[string]string{
+				accessTokenKey: "dummy-access-token",
+			},
+		}
+
+		inst, err := NewCloudLoggingDatasource(context.Background(), settings)
+		require.NoError(t, err)
+		require.NotNil(t, inst)
+		
+		ds, ok := inst.(*CloudLoggingDatasource)
+		require.True(t, ok)
+		require.Equal(t, true, ds.oauthPassThrough)
+	})
 }

@@ -64,6 +64,14 @@ export class ConfigEditor extends PureComponent<Props> {
             authenticationType: (e.value as GoogleAuthType) || GoogleAuthType.JWT,
             oauthPassThru: false,
           },
+          secureJsonData: {
+            ...options.secureJsonData,
+            accessToken: '',
+          },
+          secureJsonFields: {
+            ...options.secureJsonFields,
+            accessToken: false,
+          },
         });
       }
     };
@@ -116,6 +124,7 @@ export class ConfigEditor extends PureComponent<Props> {
               <div style={{ marginTop: '10px' }}>
                 <Label>Access Token</Label>
                 <SecretInput
+                  autoComplete="new-password"
                   value={secureJsonData.accessToken || ''}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                     onOptionsChange({
