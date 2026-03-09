@@ -45,14 +45,14 @@ jobs:
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: magefile/mage-action@v1
         with:
-          version: latest
+          version: 1.15.0
           args: coverage
 
       - name: Build backend
         if: steps.check-for-backend.outputs.has-backend == 'true'
         uses: magefile/mage-action@v1
         with:
-          version: latest
+          version: 1.15.0
           args: buildAll
 
       - name: Get plugin metadata
