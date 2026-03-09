@@ -253,6 +253,13 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		reqUrl, _ := url.Parse(req.URL)
 		params, _ := url.ParseQuery(reqUrl.RawQuery)
 
+		if params.Get("ProjectId") == "" {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   []byte(`Missing required parameter: ProjectId`),
+			})
+		}
+
 		bucketNames, err := client.ListProjectBuckets(ctx, params.Get("ProjectId"))
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing log buckets", "error", err)
@@ -272,6 +279,19 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 	} else if resource == "logviews" {
 		reqUrl, _ := url.Parse(req.URL)
 		params, _ := url.ParseQuery(reqUrl.RawQuery)
+
+		if params.Get("ProjectId") == "" {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   []byte(`Missing required parameter: ProjectId`),
+			})
+		}
+		if params.Get("BucketId") == "" {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   []byte(`Missing required parameter: BucketId`),
+			})
+		}
 
 		views, err := client.ListProjectBucketViews(ctx, params.Get("ProjectId"), params.Get("BucketId"))
 		if err != nil {

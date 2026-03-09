@@ -103,7 +103,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
     const bid = query.bucketId ? query.bucketId : "global/buckets/_Default";
-    if (!bid.startsWith('$')) {
+    if (query.projectId && !query.projectId.startsWith('$') && !bid.startsWith('$')) {
       datasource.getLogBucketViews(query.projectId, `${bid}`).then(res => {
         setViews(res.map(view => ({
           label: view,

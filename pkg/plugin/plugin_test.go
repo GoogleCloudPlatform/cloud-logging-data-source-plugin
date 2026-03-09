@@ -424,3 +424,51 @@ func TestSanitizeErrorMessage_PlainText(t *testing.T) {
 	require.Equal(t, "rpc error: code = NotFound desc = Requested entity was not found.", result)
 	require.NotContains(t, result, "Universe Domain")
 }
+
+func TestCallResource_LogBuckets_MissingProjectId(t *testing.T) {
+	client := mocks.NewAPI(t)
+	ds := &CloudLoggingDatasource{client: client}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "logBuckets",
+		URL:  "logBuckets",
+	}, sender)
+
+	require.NoError(t, err)
+	require.NotNil(t, sender.resp)
+	require.Equal(t, 400, sender.resp.Status)
+	require.Contains(t, string(sender.resp.Body), "ProjectId")
+}
+
+func TestCallResource_LogViews_MissingProjectId(t *testing.T) {
+	client := mocks.NewAPI(t)
+	ds := &CloudLoggingDatasource{client: client}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "logViews",
+		URL:  "logViews?BucketId=global%2Fbuckets%2F_Default",
+	}, sender)
+
+	require.NoError(t, err)
+	require.NotNil(t, sender.resp)
+	require.Equal(t, 400, sender.resp.Status)
+	require.Contains(t, string(sender.resp.Body), "ProjectId")
+}
+
+func TestCallResource_LogViews_MissingBucketId(t *testing.T) {
+	client := mocks.NewAPI(t)
+	ds := &CloudLoggingDatasource{client: client}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "logViews",
+		URL:  "logViews?ProjectId=my-project",
+	}, sender)
+
+	require.NoError(t, err)
+	require.NotNil(t, sender.resp)
+	require.Equal(t, 400, sender.resp.Status)
+	require.Contains(t, string(sender.resp.Body), "BucketId")
+}
