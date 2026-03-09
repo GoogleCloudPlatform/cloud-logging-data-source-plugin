@@ -60,7 +60,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     const raw = (err as any)?.data ?? (err as any)?.message ?? String(err);
     const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
     // Detect HTML content (full page or gRPC content-type error)
-    if (/<[a-z/!][^>]*>/i.test(text) || text.includes('text/html')) {
+    if (/<html[\s>]|<!doctype\s+html/i.test(text) || text.includes('text/html')) {
       return 'The server returned an HTML error page. If you have configured a Universe Domain, please verify it is correct.';
     }
     return text;

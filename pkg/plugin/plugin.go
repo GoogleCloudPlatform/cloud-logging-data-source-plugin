@@ -476,8 +476,10 @@ func (d *CloudLoggingDatasource) CheckHealth(ctx context.Context, req *backend.C
 	}, nil
 }
 
-// htmlLikePattern matches error strings that contain HTML markup or HTML content-type headers.
-var htmlLikePattern = regexp.MustCompile(`(?i)<[a-z/!][^>]*>|text/html`)
+// htmlLikePattern matches error strings that contain HTML responses. It targets
+// specific HTML signatures to avoid false positives from Go error messages that
+// contain angle-bracket notation (e.g. <nil> from ASN.1/x509 parsing).
+var htmlLikePattern = regexp.MustCompile(`(?i)<html[\s>]|<!doctype\s+html|text/html`)
 
 // sanitizeErrorMessage cleans up raw error messages that may contain HTML
 // (e.g. from an incorrect universe domain returning a 502 HTML page). It

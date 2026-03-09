@@ -46,7 +46,7 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
       // Grafana's backendSrv puts the HTTP response body in err.data
       const raw = errObj?.['data'] ?? errObj?.['message'] ?? String(err);
       const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
-      const isHtml = /<[a-z/!][^>]*>/i.test(text) || text.includes('text/html');
+      const isHtml = /<html[\s>]|<!doctype\s+html/i.test(text) || text.includes('text/html');
       return {
         status: 'error' as const,
         message: isHtml
