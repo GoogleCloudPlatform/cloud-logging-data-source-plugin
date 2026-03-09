@@ -406,7 +406,7 @@ func TestGetLogLabels(t *testing.T) {
 				"jsonPayload.number_field": "42.5",
 				"jsonPayload.bool_field":   "false",
 				"jsonPayload.null_field":   "null_value:NULL_VALUE",
-				"jsonPayload.list_field":   "list_value:{values:{string_value:\"item1\"}  values:{number_value:2}}",
+				"jsonPayload.list_field":   "list_value:{values:{string_value:\"item1\"} values:{number_value:2}}",
 			},
 		},
 		{
