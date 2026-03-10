@@ -134,7 +134,7 @@ and [Cloud Scheduler](https://cloud.google.com/scheduler), do the following:
        token**, then copy the generated token to the clipboard for use as
        GRAFANA_SERVICE_ACCOUNT_TOKEN in the next step:
 
-       ![Generate and save a service account token in Grafana.](https://cloud.google.com/static/stackdriver/images/grafana-generate-save-service-account-token.png)
+       ![Generate and save a service account token in Grafana.](https://docs.cloud.google.com/static/stackdriver/images/grafana-generate-save-service-account-token.png)
 
 1. Set the following 
    variables using the results of the previous steps:
