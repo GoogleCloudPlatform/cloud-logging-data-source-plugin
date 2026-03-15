@@ -233,7 +233,16 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 			})
 		}
 	} else if resource == "projects" {
-		projects, err := client.ListProjects(ctx)
+		reqUrl, err := url.Parse(req.URL)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   []byte(`Invalid request URL`),
+			})
+		}
+		searchQuery := reqUrl.Query().Get("query")
+
+		projects, err := client.ListProjects(ctx, searchQuery)
 		if err != nil {
 			log.DefaultLogger.Warn("problem listing projects", "error", err)
 			return sender.Send(&backend.CallResourceResponse{

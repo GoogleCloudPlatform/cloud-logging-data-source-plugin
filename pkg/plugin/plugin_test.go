@@ -378,7 +378,7 @@ func TestCallResource_Projects(t *testing.T) {
 	expectedProjects := []string{"project-a", "project-b", "project-c", "project-d", "project-e"}
 
 	client := mocks.NewAPI(t)
-	client.On("ListProjects", mock.Anything).Return(expectedProjects, nil)
+	client.On("ListProjects", mock.Anything, "").Return(expectedProjects, nil)
 
 	ds := &CloudLoggingDatasource{
 		client: client,
@@ -388,6 +388,33 @@ func TestCallResource_Projects(t *testing.T) {
 	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
 		Path: "projects",
 		URL:  "projects",
+	}, sender)
+
+	require.NoError(t, err)
+	require.NotNil(t, sender.resp)
+	require.Equal(t, 200, sender.resp.Status)
+
+	var projects []string
+	err = json.Unmarshal(sender.resp.Body, &projects)
+	require.NoError(t, err)
+	require.Equal(t, expectedProjects, projects)
+	client.AssertExpectations(t)
+}
+
+func TestCallResource_ProjectsWithQuery(t *testing.T) {
+	expectedProjects := []string{"proj-a"}
+
+	client := mocks.NewAPI(t)
+	client.On("ListProjects", mock.Anything, "proj-a").Return(expectedProjects, nil)
+
+	ds := &CloudLoggingDatasource{
+		client: client,
+	}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "projects",
+		URL:  "projects?query=proj-a",
 	}, sender)
 
 	require.NoError(t, err)

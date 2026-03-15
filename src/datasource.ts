@@ -84,12 +84,26 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
 
   /**
    * Have the backend call `resourcemanager.projects.list` with our credentials,
-   * and return the IDs of all projects found
+   * and return the IDs of all projects found.
+   * When query is provided, results are filtered server-side.
+   * The default (empty) call is cached so multiple query editors don't
+   * trigger redundant backend requests.
    *
    * @returns List of discovered project IDs
    */
-  getProjects(): Promise<string[]> {
-    return this.getResource(`projects`);
+  private defaultProjectsCache: Promise<string[]> | null = null;
+
+  getProjects(query?: string): Promise<string[]> {
+    if (!query) {
+      if (!this.defaultProjectsCache) {
+        this.defaultProjectsCache = this.getResource('projects').catch((err: unknown) => {
+          this.defaultProjectsCache = null;
+          throw err;
+        });
+      }
+      return this.defaultProjectsCache;
+    }
+    return this.getResource('projects', { query });
   }
 
   /**
