@@ -1,7 +1,7 @@
 # Changelog
 ## 1.6.1 (2026-03-15)
 * Improve the project dropdown performance
-* Fix a few minor issuse
+* Fix a few minor issues
 
 ## 1.6.0 (2026-03-09)
 * Fix authentication bug where access token auth could fail (#151)
