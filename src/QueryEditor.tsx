@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import React, { KeyboardEvent, useEffect, useMemo, useState } from 'react';
+import React, { KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
-import { InlineField, InlineFieldRow, LinkButton, Select, TextArea, Tooltip } from '@grafana/ui';
+import { Alert, InlineField, InlineFieldRow, AsyncSelect, LinkButton, Select, TextArea, Tooltip } from '@grafana/ui';
 import { DataSource } from './datasource';
 import { CloudLoggingOptions, defaultQuery, Query } from './types';
 
@@ -66,15 +66,17 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     return text;
   };
 
-  const [projects, setProjects] = useState<Array<SelectableValue<string>>>();
-  useEffect(() => {
-    datasource.getProjects().then(res => {
-      setProjects(res.map(project => ({
+  const loadProjects = useCallback((inputValue: string): Promise<Array<SelectableValue<string>>> => {
+    return datasource.getProjects(inputValue || undefined).then(res => {
+      setFetchError(undefined);
+      return res.map(project => ({
         label: project,
         value: project,
-      })));
-      setFetchError(undefined);
-    }).catch(err => setFetchError(sanitizeFetchError(err)));
+      }));
+    }).catch(err => {
+      setFetchError(sanitizeFetchError(err));
+      return [];
+    });
   }, [datasource]);
 
   const [buckets, setBuckets] = useState<Array<SelectableValue<string>>>();
@@ -174,7 +176,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     <>
       <InlineFieldRow>
         <InlineField label='Project ID'>
-          <Select
+          <AsyncSelect
             width={30}
             allowCustomValue
             formatCreateLabel={(v) => `Use project: ${v}`}
@@ -184,8 +186,9 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
               bucketId: query.bucketId && query.bucketId.startsWith('$') ? query.bucketId : "",
               viewId: query.viewId && query.viewId.startsWith('$') ? query.viewId : "",
             })}
-            options={projects}
-            value={query.projectId}
+            loadOptions={loadProjects}
+            defaultOptions
+            value={query.projectId ? { label: query.projectId, value: query.projectId } : undefined}
             placeholder="Select Project"
             inputId={`${query.refId}-project`}
           />
@@ -223,9 +226,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         </InlineField>
       </InlineFieldRow>
       {fetchError && (
-        <div style={{ color: 'rgb(224, 93, 93)', marginBottom: '8px', padding: '8px', border: '1px solid rgb(224, 93, 93)', borderRadius: '4px', background: 'rgba(224, 93, 93, 0.1)' }}>
-          ⚠️ {fetchError}
-        </div>
+        <Alert severity="error" title={fetchError} />
       )}
       <TextArea
         name="Query"
