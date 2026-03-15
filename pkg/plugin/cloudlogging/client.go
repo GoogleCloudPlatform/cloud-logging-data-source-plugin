@@ -48,8 +48,9 @@ type API interface {
 	ListLogs(context.Context, *Query) ([]*loggingpb.LogEntry, error)
 	// TestConnection queries for any log from the given project
 	TestConnection(ctx context.Context, projectID string) error
-	// ListProjects returns the project IDs of all visible projects
-	ListProjects(context.Context) ([]string, error)
+	// ListProjects returns the project IDs of all visible projects.
+	// If query is non-empty it is forwarded to the Resource Manager search filter.
+	ListProjects(ctx context.Context, query string) ([]string, error)
 	// ListProjectBuckets returns all log buckets of a project
 	ListProjectBuckets(ctx context.Context, projectId string) ([]string, error)
 	// ListProjectBucketViews returns all views of a log bucket
@@ -267,10 +268,17 @@ func (q *Query) String() string {
 	)
 }
 
-// ListProjects returns the project IDs of all visible projects
-func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
+// ListProjects returns the project IDs of all visible projects.
+// If query is non-empty it is forwarded to the Resource Manager search filter
+// (e.g. "id:*term* OR name:*term*"). Results are capped at maxProjects.
+const maxProjects = 100
+
+func (c *Client) ListProjects(ctx context.Context, query string) ([]string, error) {
 	projectIDs := []string{}
-	req := &resourcemanagerpb.SearchProjectsRequest{}
+	req := &resourcemanagerpb.SearchProjectsRequest{
+		Query:    query,
+		PageSize: maxProjects,
+	}
 	it := c.rClient.SearchProjects(ctx, req)
 	for {
 		project, err := it.Next()
@@ -284,6 +292,9 @@ func (c *Client) ListProjects(ctx context.Context) ([]string, error) {
 			continue
 		}
 		projectIDs = append(projectIDs, project.ProjectId)
+		if len(projectIDs) >= maxProjects {
+			break
+		}
 	}
 	return projectIDs, nil
 }
