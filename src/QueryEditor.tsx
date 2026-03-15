@@ -16,7 +16,7 @@
 
 import React, { KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
-import { InlineField, InlineFieldRow, AsyncSelect, LinkButton, Select, TextArea, Tooltip } from '@grafana/ui';
+import { Alert, InlineField, InlineFieldRow, AsyncSelect, LinkButton, Select, TextArea, Tooltip } from '@grafana/ui';
 import { DataSource } from './datasource';
 import { CloudLoggingOptions, defaultQuery, Query } from './types';
 
@@ -226,9 +226,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         </InlineField>
       </InlineFieldRow>
       {fetchError && (
-        <div style={{ color: 'rgb(224, 93, 93)', marginBottom: '8px', padding: '8px', border: '1px solid rgb(224, 93, 93)', borderRadius: '4px', background: 'rgba(224, 93, 93, 0.1)' }}>
-          ⚠️ {fetchError}
-        </div>
+        <Alert severity="error" title={fetchError} />
       )}
       <TextArea
         name="Query"

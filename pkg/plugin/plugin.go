@@ -219,7 +219,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 	if resource == "gcedefaultproject" {
 		proj, err := utils.GCEDefaultProject(ctx, "")
 		if err != nil {
-			log.DefaultLogger.Warn("problem getting GCE default project", "error", err)
+			log.DefaultLogger.Error("problem getting GCE default project", "error", err)
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
 				Body:   []byte(sanitizeErrorMessage(err)),
@@ -244,7 +244,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 
 		projects, err := client.ListProjects(ctx, searchQuery)
 		if err != nil {
-			log.DefaultLogger.Warn("problem listing projects", "error", err)
+			log.DefaultLogger.Error("problem listing projects", "error", err)
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
 				Body:   []byte(sanitizeErrorMessage(err)),
@@ -271,7 +271,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 
 		bucketNames, err := client.ListProjectBuckets(ctx, params.Get("ProjectId"))
 		if err != nil {
-			log.DefaultLogger.Warn("problem listing log buckets", "error", err)
+			log.DefaultLogger.Error("problem listing log buckets", "error", err)
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
 				Body:   []byte(sanitizeErrorMessage(err)),
@@ -304,7 +304,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 
 		views, err := client.ListProjectBucketViews(ctx, params.Get("ProjectId"), params.Get("BucketId"))
 		if err != nil {
-			log.DefaultLogger.Warn("problem listing log views", "error", err)
+			log.DefaultLogger.Error("problem listing log views", "error", err)
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
 				Body:   []byte(sanitizeErrorMessage(err)),
