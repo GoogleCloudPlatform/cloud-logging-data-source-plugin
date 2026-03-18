@@ -100,12 +100,17 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         setFetchError(undefined);
       }).catch(err => setFetchError(sanitizeFetchError(err)));
     }
-  }, [datasource, query]);
+  }, [datasource, query.projectId]);
 
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
+    if (!buckets || buckets.length === 0) {
+      return;
+    }
     const bid = query.bucketId ? query.bucketId : "global/buckets/_Default";
-    if (query.projectId && !query.projectId.startsWith('$') && !bid.startsWith('$')) {
+    // Only fetch views if the selected bucket actually exists in the loaded buckets list
+    const bucketExists = buckets.some(b => b.value === bid);
+    if (query.projectId && !query.projectId.startsWith('$') && !bid.startsWith('$') && bucketExists) {
       datasource.getLogBucketViews(query.projectId, `${bid}`).then(res => {
         setViews(res.map(view => ({
           label: view,
@@ -114,7 +119,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         setFetchError(undefined);
       }).catch(err => setFetchError(sanitizeFetchError(err)));
     }
-  }, [datasource, query]);
+  }, [datasource, query.projectId, query.bucketId, buckets]);
 
   /**
    * Keep an up-to-date URI that links to the equivalent query in the GCP console
