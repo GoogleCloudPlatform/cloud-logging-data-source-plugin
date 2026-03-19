@@ -57,7 +57,11 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
    * from proxy/universe-domain errors in err.data or err.message.
    */
   const sanitizeFetchError = (err: unknown): string => {
-    const raw = (err as any)?.data ?? (err as any)?.message ?? String(err);
+    const errData = (err as any)?.data;
+    // When the backend returns JSON { "message": "..." }, err.data is the parsed object
+    const raw = (typeof errData === 'object' && errData?.message)
+      ? errData.message
+      : errData ?? (err as any)?.message ?? String(err);
     const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
     // Detect HTML content (full page or gRPC content-type error)
     if (/<html[\s>]|<!doctype\s+html/i.test(text) || text.includes('text/html')) {
