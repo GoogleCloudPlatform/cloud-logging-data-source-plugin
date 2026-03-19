@@ -1,4 +1,12 @@
 # Changelog
+## 1.6.2 (2026-03-18)
+* Fix project dropdown search failing with "contains global restriction" error
+* Fix `useEffect` dependency causing excessive API calls for log buckets and views
+* Fix log views being fetched before buckets have loaded, causing errors for projects without the default bucket
+* Return error responses as JSON so Grafana displays actual error messages instead of generic "Unexpected error"
+* Suppress duplicate error toast notifications — errors now only appear in the inline alert
+* Fix inline error alert showing raw JSON instead of the error message text
+
 ## 1.6.1 (2026-03-15)
 * Improve the project dropdown performance
 * Fix a few minor issues

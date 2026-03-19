@@ -274,9 +274,14 @@ func (q *Query) String() string {
 const maxProjects = 100
 
 func (c *Client) ListProjects(ctx context.Context, query string) ([]string, error) {
+	filter := ""
+	if query != "" {
+		filter = fmt.Sprintf("id:*%s* OR name:*%s*", query, query)
+	}
+
 	projectIDs := []string{}
 	req := &resourcemanagerpb.SearchProjectsRequest{
-		Query:    query,
+		Query:    filter,
 		PageSize: maxProjects,
 	}
 	it := c.rClient.SearchProjects(ctx, req)

@@ -57,7 +57,11 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
    * from proxy/universe-domain errors in err.data or err.message.
    */
   const sanitizeFetchError = (err: unknown): string => {
-    const raw = (err as any)?.data ?? (err as any)?.message ?? String(err);
+    const errData = (err as any)?.data;
+    // When the backend returns JSON { "message": "..." }, err.data is the parsed object
+    const raw = (typeof errData === 'object' && errData?.message)
+      ? errData.message
+      : errData ?? (err as any)?.message ?? String(err);
     const text = typeof raw === 'string' ? raw : JSON.stringify(raw);
     // Detect HTML content (full page or gRPC content-type error)
     if (/<html[\s>]|<!doctype\s+html/i.test(text) || text.includes('text/html')) {
@@ -100,12 +104,17 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         setFetchError(undefined);
       }).catch(err => setFetchError(sanitizeFetchError(err)));
     }
-  }, [datasource, query]);
+  }, [datasource, query.projectId]);
 
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
+    if (!buckets || buckets.length === 0) {
+      return;
+    }
     const bid = query.bucketId ? query.bucketId : "global/buckets/_Default";
-    if (query.projectId && !query.projectId.startsWith('$') && !bid.startsWith('$')) {
+    // Only fetch views if the selected bucket actually exists in the loaded buckets list
+    const bucketExists = buckets.some(b => b.value === bid);
+    if (query.projectId && !query.projectId.startsWith('$') && !bid.startsWith('$') && bucketExists) {
       datasource.getLogBucketViews(query.projectId, `${bid}`).then(res => {
         setViews(res.map(view => ({
           label: view,
@@ -114,7 +123,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         setFetchError(undefined);
       }).catch(err => setFetchError(sanitizeFetchError(err)));
     }
-  }, [datasource, query]);
+  }, [datasource, query.projectId, query.bucketId, buckets]);
 
   /**
    * Keep an up-to-date URI that links to the equivalent query in the GCP console

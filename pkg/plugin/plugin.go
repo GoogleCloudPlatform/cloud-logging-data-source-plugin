@@ -180,6 +180,14 @@ func (d *CloudLoggingDatasource) Dispose() {
 	}
 }
 
+// jsonErrorBody returns a JSON-encoded body with a "message" field so that
+// Grafana's frontend can surface the actual error text instead of the generic
+// "Unexpected error" fallback.
+func jsonErrorBody(msg string) []byte {
+	b, _ := json.Marshal(map[string]string{"message": msg})
+	return b
+}
+
 // CallResource fetches some resource from GCP using the data source's credentials
 // Currently limited resources are fetched, other requests receive a 404
 func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.CallResourceRequest, sender backend.CallResourceResponseSender) error {
@@ -199,7 +207,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		if err != nil {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
-				Body:   []byte(sanitizeErrorMessage(err)),
+				Body:   jsonErrorBody(sanitizeErrorMessage(err)),
 			})
 		}
 
@@ -222,14 +230,14 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 			log.DefaultLogger.Error("problem getting GCE default project", "error", err)
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
-				Body:   []byte(sanitizeErrorMessage(err)),
+				Body:   jsonErrorBody(sanitizeErrorMessage(err)),
 			})
 		}
 		body, err = json.Marshal(proj)
 		if err != nil {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusInternalServerError,
-				Body:   []byte(`Unable to create response`),
+				Body:   jsonErrorBody("Unable to create response"),
 			})
 		}
 	} else if resource == "projects" {
@@ -237,7 +245,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		if err != nil {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadRequest,
-				Body:   []byte(`Invalid request URL`),
+				Body:   jsonErrorBody("Invalid request URL"),
 			})
 		}
 		searchQuery := reqUrl.Query().Get("query")
@@ -247,7 +255,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 			log.DefaultLogger.Error("problem listing projects", "error", err)
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
-				Body:   []byte(sanitizeErrorMessage(err)),
+				Body:   jsonErrorBody(sanitizeErrorMessage(err)),
 			})
 		}
 
@@ -255,7 +263,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		if err != nil {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusInternalServerError,
-				Body:   []byte(`Unable to create response`),
+				Body:   jsonErrorBody("Unable to create response"),
 			})
 		}
 	} else if resource == "logbuckets" {
@@ -265,7 +273,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		if params.Get("ProjectId") == "" {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadRequest,
-				Body:   []byte(`Missing required parameter: ProjectId`),
+				Body:   jsonErrorBody("Missing required parameter: ProjectId"),
 			})
 		}
 
@@ -274,7 +282,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 			log.DefaultLogger.Error("problem listing log buckets", "error", err)
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
-				Body:   []byte(sanitizeErrorMessage(err)),
+				Body:   jsonErrorBody(sanitizeErrorMessage(err)),
 			})
 		}
 
@@ -282,7 +290,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		if err != nil {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusInternalServerError,
-				Body:   []byte(`Unable to create response`),
+				Body:   jsonErrorBody("Unable to create response"),
 			})
 		}
 	} else if resource == "logviews" {
@@ -292,13 +300,13 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		if params.Get("ProjectId") == "" {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadRequest,
-				Body:   []byte(`Missing required parameter: ProjectId`),
+				Body:   jsonErrorBody("Missing required parameter: ProjectId"),
 			})
 		}
 		if params.Get("BucketId") == "" {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadRequest,
-				Body:   []byte(`Missing required parameter: BucketId`),
+				Body:   jsonErrorBody("Missing required parameter: BucketId"),
 			})
 		}
 
@@ -307,7 +315,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 			log.DefaultLogger.Error("problem listing log views", "error", err)
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusBadGateway,
-				Body:   []byte(sanitizeErrorMessage(err)),
+				Body:   jsonErrorBody(sanitizeErrorMessage(err)),
 			})
 		}
 
@@ -315,13 +323,13 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		if err != nil {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusInternalServerError,
-				Body:   []byte(`Unable to create response`),
+				Body:   jsonErrorBody("Unable to create response"),
 			})
 		}
 	} else {
 		return sender.Send(&backend.CallResourceResponse{
 			Status: http.StatusNotFound,
-			Body:   []byte(`No such path`),
+			Body:   jsonErrorBody("No such path"),
 		})
 	}
 	return sender.Send(&backend.CallResourceResponse{
