@@ -8,7 +8,7 @@ require (
 	github.com/grafana/grafana-google-sdk-go v0.2.1
 	github.com/grafana/grafana-plugin-sdk-go v0.290.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/oauth2 v0.35.0
+	golang.org/x/oauth2 v0.36.0
 	google.golang.org/api v0.247.0
 	google.golang.org/genproto v0.0.0-20250603155806-513f23925822
 	google.golang.org/genproto/googleapis/api v0.0.0-20260128011058-8636f8732409
