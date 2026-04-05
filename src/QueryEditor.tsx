@@ -46,6 +46,11 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     query.projectId = '';
   }
 
+  if (query.bucketId && !query.bucketId.startsWith('$') && datasource.filterBuckets([query.bucketId]).length === 0) {
+    // Previously selected bucket no longer passes the filter — clear it
+    query.bucketId = '';
+  }
+
   // Check query field from query params to support default way of propagating query from other parts of grafana.
   if (query.query) {
     query.queryText = query.query;
@@ -95,7 +100,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     if (!query.projectId) {
       datasource.getDefaultProject().then(r => {
         query.projectId = r;
-        datasource.getLogBuckets(query.projectId).then(res => {
+        datasource.getFilteredBuckets(query.projectId).then(res => {
           setBuckets(res.map(bucket => ({
             label: bucket,
             value: bucket,
@@ -103,7 +108,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         }).catch(err => setFetchError(sanitizeFetchError(err)));
       });
     } else if (!query.projectId.startsWith('$')) {
-      datasource.getLogBuckets(query.projectId).then(res => {
+      datasource.getFilteredBuckets(query.projectId).then(res => {
         setBuckets(res.map(bucket => ({
           label: bucket,
           value: bucket,

@@ -227,6 +227,27 @@ const defaultProject = (props: Props) => {
           onPointerLeaveCapture={undefined}
         />
       </Field>
+      <Field
+        label="Log Bucket Filter"
+        description="Filter log buckets in dropdowns. Enter patterns one per line. Prefix a line with ! to exclude matching buckets. Without !, only matching buckets are included. Patterns are regex matched against the full bucket path. Leave empty to show all buckets."
+      >
+        <TextArea
+          value={options.jsonData.logBucketFilter || ''}
+          placeholder={'!.*/_Default\nmy-custom-bucket-.*'}
+          rows={4}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+            onOptionsChange({
+              ...options,
+              jsonData: {
+                ...options.jsonData,
+                logBucketFilter: e.target.value,
+              },
+            });
+          }}
+          onPointerEnterCapture={undefined}
+          onPointerLeaveCapture={undefined}
+        />
+      </Field>
     </>
   );
 };

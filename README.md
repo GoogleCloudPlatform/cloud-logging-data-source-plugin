@@ -63,7 +63,8 @@ Leave this field empty to use the default `googleapis.com` domain.
 4. Provide credentials from your JWT file, either by uploading it using the file selector or by pasting its contents directly into the designated field
 5. Optionally, configure the **Universe Domain** if you are using a non-default GCP environment
 6. Optionally, configure the **Project List Filter** to restrict which projects appear in the project dropdown (see [Project List Filter](#project-list-filter) below)
-7. Click "Save & test" to test that logs can be queried from Cloud Logging
+7. Optionally, configure the **Log Bucket Filter** to include or exclude specific log buckets from the bucket dropdown (see [Log Bucket Filter](#log-bucket-filter) below)
+8. Click "Save & test" to test that logs can be queried from Cloud Logging
 
 ![image info](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/cloud_logging_config.png?raw=true)
 
@@ -83,9 +84,30 @@ Each line is treated as a [regular expression](https://developer.mozilla.org/en-
 
 You can combine multiple patterns (one per line) to match the union of all patterns. If a pattern contains invalid regex syntax, it is treated as a literal string match.
 
+### Log Bucket Filter
+
+You can control which log buckets appear in the bucket dropdown by configuring a **Log Bucket Filter** in the data source settings. This supports both **include** and **exclude** patterns, which is especially useful for excluding default system buckets from initiative projects.
+
+Enter patterns in the text area, one per line:
+- **Include patterns** (no prefix): Only buckets matching at least one include pattern are shown.
+- **Exclude patterns** (prefixed with `!`): Buckets matching any exclude pattern are removed.
+
+When both include and exclude patterns are present, include patterns are applied first, then exclude patterns remove from the result. Leave the field empty to show all buckets (the default behavior).
+
+Patterns are [regular expressions](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions) anchored to the **full bucket path** as returned by the API (e.g., `global/buckets/_Default` or `locations/us-central1/buckets/my-bucket`).
+
+| Pattern | Effect |
+| --- | --- |
+| `!.*/_Default` | Exclude all `_Default` buckets across all locations |
+| `!.*/_Default`<br>`!.*/_Required` | Exclude both `_Default` and `_Required` buckets |
+| `.*my-app-logs` | Include only buckets ending with `my-app-logs` |
+| `global/buckets/.*`<br>`!.*/_Default` | Include only `global/buckets/*` buckets, but exclude `_Default` |
+
+If a pattern contains invalid regex syntax, it is treated as a literal string match.
+
 ### An alternative way to provision the data source
 
-After the plugin is installed, you can define and configure the data source in YAML files as part of Grafana’s provisioning system, similar to [the Google Cloud Monitoring plugin](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/#provision-the-data-source). For more information about provisioning, and for available configuration options, refer to [Provisioning Grafana](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources).
+After the plugin is installed, you can define and configure the data source in YAML files as part of Grafana's provisioning system, similar to [the Google Cloud Monitoring plugin](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/#provision-the-data-source). For more information about provisioning, and for available configuration options, refer to [Provisioning Grafana](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources).
 
 The following YAML is an example.
 
@@ -102,6 +124,9 @@ datasources:
       # projectListFilter: |
       #   my-project-123
       #   team-alpha-.*
+      # Optional: filter log buckets (prefix with ! to exclude)
+      # logBucketFilter: |
+      #   !.*/_Default
       # Optional: custom universe domain for sovereign cloud environments
       # universeDomain: googleapis.com
 ```

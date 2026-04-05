@@ -42,6 +42,7 @@ export interface DataSourceOptionsExt extends DataSourceOptions {
   oauthPassThru?: boolean;
   universeDomain?: string;
   projectListFilter?: string;
+  logBucketFilter?: string;
 }
 
 /**

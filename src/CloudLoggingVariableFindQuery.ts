@@ -25,7 +25,7 @@ export default class CloudLoggingVariableFindQuery {
     async execute(query: CloudLoggingVariableQuery) {
         try {
             if (!query.projectId) {
-                this.datasource.getDefaultProject().then(r => query.projectId = r);
+                query.projectId = await this.datasource.getDefaultProject();
             }
             switch (query.selectedQueryType) {
                 case LogFindQueryScopes.Projects:
@@ -58,7 +58,7 @@ export default class CloudLoggingVariableFindQuery {
         if (projectId.startsWith('$')) {
             p = getTemplateSrv().replace(projectId)
         }
-        buckets = await this.datasource.getLogBuckets(p);
+        buckets = await this.datasource.getFilteredBuckets(p);
         return (buckets).map((s) => ({
             text: s,
             value: s,

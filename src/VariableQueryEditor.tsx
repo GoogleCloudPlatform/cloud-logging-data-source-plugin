@@ -52,7 +52,7 @@ export class CloudLoggingVariableQueryEditor extends PureComponent<Props, Variab
         const projects = (await this.props.datasource.getFilteredProjects());
         let buckets: string[] = [];
         if (!projectId.startsWith('$')) {
-            buckets = await this.props.datasource.getLogBuckets(projectId);
+            buckets = await this.props.datasource.getFilteredBuckets(projectId);
         }
 
         const state: any = {
@@ -80,7 +80,7 @@ export class CloudLoggingVariableQueryEditor extends PureComponent<Props, Variab
     async onProjectChange(projectId: string) {
         let buckets: string[] = [];
         if (!projectId.startsWith('$')) {
-            buckets = await this.props.datasource.getLogBuckets(projectId);
+            buckets = await this.props.datasource.getFilteredBuckets(projectId);
         }
         const state: any = {
             buckets,
