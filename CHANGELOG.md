@@ -1,4 +1,9 @@
 # Changelog
+## 1.6.3 (2026-04-05)
+* Add Project List Filter to restrict which projects appear in dropdowns using regex patterns
+* Add Log Bucket Filter with include/exclude support — prefix patterns with `!` to exclude matching buckets (e.g., `!.*/_Default` to hide Default buckets)
+* Fix race condition in variable query where default project could be unresolved before bucket/view queries run
+
 ## 1.6.2 (2026-03-18)
 * Fix project dropdown search failing with "contains global restriction" error
 * Fix `useEffect` dependency causing excessive API calls for log buckets and views

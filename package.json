@@ -1,6 +1,6 @@
 {
   "name": "googlecloud-logging-datasource",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Backend Grafana plugin that enables visualization of GCP Cloud Logging logs in Grafana.",
   "scripts": {
     "build": "webpack -c ./.config/webpack/webpack.config.ts --env production",
