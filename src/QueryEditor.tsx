@@ -34,9 +34,16 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     }
   };
 
-  // Apply defaults if needed
+  // Apply defaults if needed, and validate against project list filter
   if (!query.projectId) {
-    datasource.getDefaultProject().then(r => query.projectId = r);
+    datasource.getDefaultProject().then(r => {
+      if (datasource.filterProjects([r]).length > 0) {
+        query.projectId = r;
+      }
+    });
+  } else if (!query.projectId.startsWith('$') && datasource.filterProjects([query.projectId]).length === 0) {
+    // Previously selected project no longer passes the filter — clear it
+    query.projectId = '';
   }
 
   // Check query field from query params to support default way of propagating query from other parts of grafana.
@@ -71,7 +78,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   };
 
   const loadProjects = useCallback((inputValue: string): Promise<Array<SelectableValue<string>>> => {
-    return datasource.getProjects(inputValue || undefined).then(res => {
+    return datasource.getFilteredProjects(inputValue || undefined).then(res => {
       setFetchError(undefined);
       return res.map(project => ({
         label: project,

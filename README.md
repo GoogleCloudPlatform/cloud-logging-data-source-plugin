@@ -49,15 +49,39 @@ Once Grafana is configured with Google authentication for signing in, ensure tha
 
 You can then configure the data source with the `OAuth Passthrough` authentication method. Ensure that you provide a default project ID otherwise the health-check will fail.
 
+### Universe Domain
+
+If you are using a Google Cloud environment that uses a custom universe domain (e.g., a sovereign or isolated cloud), you can configure the **Universe Domain** in the data source settings. This tells the plugin to use a different API endpoint instead of the default `googleapis.com`.
+
+Leave this field empty to use the default `googleapis.com` domain.
+
 ### Grafana Configuration
 
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
 2. Click "Add data source"
 3. Select "Google Cloud Logging"
 4. Provide credentials from your JWT file, either by uploading it using the file selector or by pasting its contents directly into the designated field
-5. Click "Save & test" to test that logs can be queried from Cloud Logging
+5. Optionally, configure the **Universe Domain** if you are using a non-default GCP environment
+6. Optionally, configure the **Project List Filter** to restrict which projects appear in the project dropdown (see [Project List Filter](#project-list-filter) below)
+7. Click "Save & test" to test that logs can be queried from Cloud Logging
 
 ![image info](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/cloud_logging_config.png?raw=true)
+
+### Project List Filter
+
+If you have access to many GCP projects, you can restrict which projects appear in the project dropdown by configuring a **Project List Filter** in the data source settings.
+
+Enter project IDs or regex patterns in the text area, one per line. Only projects matching at least one pattern will appear in the dropdown. Leave the field empty to show all projects (the default behavior).
+
+Each line is treated as a [regular expression](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide/Regular_expressions) anchored to the full project ID. For example:
+
+| Pattern | Matches |
+| --- | --- |
+| `my-project-123` | Only the exact project `my-project-123` |
+| `team-alpha-.*` | All projects starting with `team-alpha-` |
+| `prod-.*-logging` | Projects like `prod-us-logging`, `prod-eu-logging`, etc. |
+
+You can combine multiple patterns (one per line) to match the union of all patterns. If a pattern contains invalid regex syntax, it is treated as a literal string match.
 
 ### An alternative way to provision the data source
 
@@ -74,6 +98,12 @@ datasources:
     access: proxy
     jsonData:
       authenticationType: gce
+      # Optional: restrict the project dropdown to matching projects (regex supported)
+      # projectListFilter: |
+      #   my-project-123
+      #   team-alpha-.*
+      # Optional: custom universe domain for sovereign cloud environments
+      # universeDomain: googleapis.com
 ```
 
 ### Supported variables

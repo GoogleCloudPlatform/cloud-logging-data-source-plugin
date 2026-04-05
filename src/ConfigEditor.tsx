@@ -16,7 +16,7 @@
 
 import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
 import { ConnectionConfig, GoogleAuthType } from '@grafana/google-sdk';
-import { Checkbox, Field, Input, SecretInput, Select } from '@grafana/ui';
+import { Checkbox, Field, Input, SecretInput, Select, TextArea } from '@grafana/ui';
 import React, { PureComponent } from 'react';
 import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData } from './types';
 
@@ -199,6 +199,27 @@ const defaultProject = (props: Props) => {
               jsonData: {
                 ...options.jsonData,
                 universeDomain: e.target.value,
+              },
+            });
+          }}
+          onPointerEnterCapture={undefined}
+          onPointerLeaveCapture={undefined}
+        />
+      </Field>
+      <Field
+        label="Project List Filter"
+        description="Enter project IDs or regex patterns, one per line. Only matching projects will appear in the project dropdown. Leave empty to show all projects."
+      >
+        <TextArea
+          value={options.jsonData.projectListFilter || ''}
+          placeholder={'my-project-id\nteam-.*\nprod-.*-logging'}
+          rows={4}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => {
+            onOptionsChange({
+              ...options,
+              jsonData: {
+                ...options.jsonData,
+                projectListFilter: e.target.value,
               },
             });
           }}

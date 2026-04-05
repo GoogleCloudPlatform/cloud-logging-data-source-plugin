@@ -44,7 +44,7 @@ export default class CloudLoggingVariableFindQuery {
     }
 
     async handleProjectsQuery() {
-        const projects = await this.datasource.getProjects();
+        const projects = await this.datasource.getFilteredProjects();
         return (projects).map((s) => ({
             text: s,
             value: s,

@@ -41,6 +41,7 @@ export interface DataSourceOptionsExt extends DataSourceOptions {
   usingImpersonation?: boolean;
   oauthPassThru?: boolean;
   universeDomain?: string;
+  projectListFilter?: string;
 }
 
 /**

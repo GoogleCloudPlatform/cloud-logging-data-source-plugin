@@ -124,6 +124,43 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   }
 
   /**
+   * Filter a list of project IDs against the configured project list filter patterns.
+   * Each non-empty line in `projectListFilter` is treated as a regex pattern
+   * anchored to the full project ID (^pattern$).
+   * If no patterns are configured, all projects pass through unchanged.
+   */
+  filterProjects(projects: string[]): string[] {
+    const raw = this.instanceSettings.jsonData.projectListFilter;
+    if (!raw || !raw.trim()) {
+      return projects;
+    }
+    const patterns = raw
+      .split('\n')
+      .map((line: string) => line.trim())
+      .filter((line: string) => line.length > 0);
+    if (patterns.length === 0) {
+      return projects;
+    }
+    const regexes = patterns.map((p: string) => {
+      try {
+        return new RegExp(`^${p}$`);
+      } catch {
+        // If invalid regex, escape special chars and treat as literal match
+        return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+      }
+    });
+    return projects.filter((proj: string) => regexes.some((r: RegExp) => r.test(proj)));
+  }
+
+  /**
+   * Get projects from the API and apply the configured project list filter.
+   */
+  async getFilteredProjects(query?: string): Promise<string[]> {
+    const projects = await this.getProjects(query);
+    return this.filterProjects(projects);
+  }
+
+  /**
    * Have the backend call `projects.locations.buckets.list` with our credentials,
    * and return the names of all log buckets found
    *
