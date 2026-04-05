@@ -124,6 +124,43 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   }
 
   /**
+   * Filter a list of project IDs against the configured project list filter patterns.
+   * Each non-empty line in `projectListFilter` is treated as a regex pattern
+   * anchored to the full project ID (^pattern$).
+   * If no patterns are configured, all projects pass through unchanged.
+   */
+  filterProjects(projects: string[]): string[] {
+    const raw = this.instanceSettings.jsonData.projectListFilter;
+    if (!raw || !raw.trim()) {
+      return projects;
+    }
+    const patterns = raw
+      .split('\n')
+      .map((line: string) => line.trim())
+      .filter((line: string) => line.length > 0);
+    if (patterns.length === 0) {
+      return projects;
+    }
+    const regexes = patterns.map((p: string) => {
+      try {
+        return new RegExp(`^${p}$`);
+      } catch {
+        // If invalid regex, escape special chars and treat as literal match
+        return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+      }
+    });
+    return projects.filter((proj: string) => regexes.some((r: RegExp) => r.test(proj)));
+  }
+
+  /**
+   * Get projects from the API and apply the configured project list filter.
+   */
+  async getFilteredProjects(query?: string): Promise<string[]> {
+    const projects = await this.getProjects(query);
+    return this.filterProjects(projects);
+  }
+
+  /**
    * Have the backend call `projects.locations.buckets.list` with our credentials,
    * and return the names of all log buckets found
    *
@@ -131,6 +168,81 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
    */
   getLogBuckets(projectId: string): Promise<string[]> {
     return this.getResource(`logBuckets`, { "ProjectId": projectId });
+  }
+
+  /**
+   * Filter a list of bucket IDs against the configured log bucket filter patterns.
+   * Each non-empty line in `logBucketFilter` is treated as a regex pattern
+   * anchored to the full bucket path (^pattern$).
+   *
+   * Lines prefixed with `!` are **exclude** patterns — matching buckets are removed.
+   * Lines without `!` are **include** patterns — only matching buckets are kept.
+   *
+   * Evaluation order:
+   * 1. If include patterns exist, keep only buckets matching at least one.
+   * 2. Remove any buckets matching any exclude pattern.
+   * If no patterns are configured, all buckets pass through unchanged.
+   */
+  filterBuckets(buckets: string[]): string[] {
+    const raw = this.instanceSettings.jsonData.logBucketFilter;
+    if (!raw || !raw.trim()) {
+      return buckets;
+    }
+    const lines = raw
+      .split('\n')
+      .map((line: string) => line.trim())
+      .filter((line: string) => line.length > 0);
+    if (lines.length === 0) {
+      return buckets;
+    }
+
+    const toRegex = (pattern: string): RegExp => {
+      try {
+        return new RegExp(`^${pattern}$`);
+      } catch {
+        return new RegExp(`^${pattern.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+      }
+    };
+
+    const includePatterns: RegExp[] = [];
+    const excludePatterns: RegExp[] = [];
+
+    for (const line of lines) {
+      if (line.startsWith('!')) {
+        const pattern = line.slice(1).trim();
+        if (pattern.length > 0) {
+          excludePatterns.push(toRegex(pattern));
+        }
+      } else {
+        includePatterns.push(toRegex(line));
+      }
+    }
+
+    let result = buckets;
+
+    // Step 1: If include patterns exist, keep only matching buckets
+    if (includePatterns.length > 0) {
+      result = result.filter((bucket: string) =>
+        includePatterns.some((r: RegExp) => r.test(bucket))
+      );
+    }
+
+    // Step 2: Remove any buckets matching exclude patterns
+    if (excludePatterns.length > 0) {
+      result = result.filter((bucket: string) =>
+        !excludePatterns.some((r: RegExp) => r.test(bucket))
+      );
+    }
+
+    return result;
+  }
+
+  /**
+   * Get log buckets from the API and apply the configured log bucket filter.
+   */
+  async getFilteredBuckets(projectId: string): Promise<string[]> {
+    const buckets = await this.getLogBuckets(projectId);
+    return this.filterBuckets(buckets);
   }
 
   /**
