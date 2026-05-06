@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import React, { KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
 import { Alert, InlineField, InlineFieldRow, AsyncSelect, LinkButton, Select, TextArea, Tooltip } from '@grafana/ui';
 import { DataSource } from './datasource';
@@ -34,32 +34,104 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     }
   };
 
-  // Apply defaults if needed, and validate against project list filter
-  if (!query.projectId) {
-    datasource.getDefaultProject().then(r => {
-      if (datasource.filterProjects([r]).length > 0) {
-        query.projectId = r;
+  // Keep a ref to the latest query so async callbacks avoid stale closures
+  const queryRef = useRef(query);
+  queryRef.current = query;
+
+
+  // Compute normalized queryText as a derived value (never mutate the prop directly)
+  const effectiveQueryText = query.query ?? query.queryText ?? defaultQuery.queryText;
+
+  // Initialization effect: runs on mount and whenever the datasource instance changes.
+  // On datasource switch (UID changed): always reset to the new datasource's default project,
+  // since the carried-over projectId belongs to the old datasource.
+  // On initial mount: validate existing project/bucket against filters and resolve defaults.
+  useEffect(() => {
+    let cancelled = false;
+
+    // Helper: compute queryText normalization against a given query state.
+    const computeTextUpdates = (q: Query): Partial<Query> => {
+      const norm: Partial<Query> = {};
+      if (q.query) {
+        norm.queryText = q.query;
+        norm.query = undefined;
+      }
+      if ((norm.queryText ?? q.queryText) == null) {
+        norm.queryText = defaultQuery.queryText;
+      }
+      return norm;
+    };
+
+    // Always resolve the default project for this datasource on mount.
+    // This handles both initial mount and datasource switches (Grafana
+    // unmounts/remounts the QueryEditor on switch, so refs don't survive).
+    datasource.getDefaultProject().then(async defaultProject => {
+      if (cancelled) {
+        return;
+      }
+      const latestQuery = queryRef.current;
+      const textUpdates = computeTextUpdates(latestQuery);
+      const currentProjectId = latestQuery.projectId;
+
+      // If the current project is a template variable, leave it alone
+      if (currentProjectId && currentProjectId.startsWith('$')) {
+        if (Object.keys(textUpdates).length > 0) {
+          onChange({ ...latestQuery, ...textUpdates });
+        }
+        return;
+      }
+
+      // If no project is set, or the current project is not valid for this
+      // datasource (e.g., carried over from a different datasource),
+      // reset to the best available project and clear bucket/view.
+      const isCurrentProjectValid = currentProjectId &&
+        datasource.filterProjects([currentProjectId]).length > 0;
+
+      if (!isCurrentProjectValid) {
+        // Try the default project first; if it doesn't pass the filter,
+        // fetch the full filtered project list and pick the first one.
+        let newProjectId = '';
+        if (defaultProject && datasource.filterProjects([defaultProject]).length > 0) {
+          newProjectId = defaultProject;
+        } else {
+          // Default project doesn't pass the filter — fall back to
+          // the first project that does.
+          try {
+            const filteredProjects = await datasource.getFilteredProjects();
+            if (!cancelled && filteredProjects.length > 0) {
+              newProjectId = filteredProjects[0];
+            }
+          } catch {
+            // If we can't fetch projects, leave it empty
+          }
+        }
+        if (cancelled) {
+          return;
+        }
+        if (newProjectId !== currentProjectId) {
+          onChange({ ...latestQuery, ...textUpdates, projectId: newProjectId, bucketId: '', viewId: '' });
+          if (newProjectId) {
+            onRunQuery();
+          }
+        } else if (Object.keys(textUpdates).length > 0) {
+          onChange({ ...latestQuery, ...textUpdates });
+        }
+        return;
+      }
+
+      // Project matches default — just apply text normalizations and filter checks
+      const updates: Partial<Query> = { ...textUpdates };
+      if (latestQuery.bucketId && !latestQuery.bucketId.startsWith('$') &&
+        datasource.filterBuckets([latestQuery.bucketId]).length === 0) {
+        updates.bucketId = '';
+      }
+      if (Object.keys(updates).length > 0) {
+        onChange({ ...latestQuery, ...updates });
       }
     });
-  } else if (!query.projectId.startsWith('$') && datasource.filterProjects([query.projectId]).length === 0) {
-    // Previously selected project no longer passes the filter — clear it
-    query.projectId = '';
-  }
 
-  if (query.bucketId && !query.bucketId.startsWith('$') && datasource.filterBuckets([query.bucketId]).length === 0) {
-    // Previously selected bucket no longer passes the filter — clear it
-    query.bucketId = '';
-  }
-
-  // Check query field from query params to support default way of propagating query from other parts of grafana.
-  if (query.query) {
-    query.queryText = query.query;
-    query.query = undefined;
-  }
-
-  if (query.queryText == null) {
-    query.queryText = defaultQuery.queryText;
-  }
+    return () => { cancelled = true; };
+  }, [datasource]);
 
 
   const [fetchError, setFetchError] = useState<string | undefined>();
@@ -97,17 +169,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
 
   const [buckets, setBuckets] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
-    if (!query.projectId) {
-      datasource.getDefaultProject().then(r => {
-        query.projectId = r;
-        datasource.getFilteredBuckets(query.projectId).then(res => {
-          setBuckets(res.map(bucket => ({
-            label: bucket,
-            value: bucket,
-          })));
-        }).catch(err => setFetchError(sanitizeFetchError(err)));
-      });
-    } else if (!query.projectId.startsWith('$')) {
+    if (query.projectId && !query.projectId.startsWith('$')) {
       datasource.getFilteredBuckets(query.projectId).then(res => {
         setBuckets(res.map(bucket => ({
           label: bucket,
@@ -141,7 +203,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
    * Keep an up-to-date URI that links to the equivalent query in the GCP console
    */
   const gcpConsoleURI = useMemo<string | undefined>(() => {
-    if (!query.queryText) {
+    if (!effectiveQueryText) {
       return undefined;
     }
 
@@ -169,7 +231,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       storageScope = `;storageScope=${scopePath.replace(/\//g, '%2F')}`;
     }
 
-    const encodedText = encodeURIComponent(`${query.queryText}`).replace(/[!'()*]/g, function (c) {
+    const encodedText = encodeURIComponent(`${effectiveQueryText}`).replace(/[!'()*]/g, function (c) {
       if (c === '(' || c === ')') {
         return '%25' + c.charCodeAt(0).toString(16);
       }
@@ -198,6 +260,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       <InlineFieldRow>
         <InlineField label='Project ID'>
           <AsyncSelect
+            key={datasource.uid}
             width={30}
             allowCustomValue
             formatCreateLabel={(v) => `Use project: ${v}`}
@@ -252,7 +315,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       <TextArea
         name="Query"
         className="slate-query-field"
-        value={query.queryText}
+        value={effectiveQueryText}
         rows={10}
         placeholder="Enter a Cloud Logging query (Run with Shift+Enter)"
         onBlur={onRunQuery}
