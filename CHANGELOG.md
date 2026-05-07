@@ -1,4 +1,9 @@
 # Changelog
+## 1.6.4 (2026-05-06)
+* Fix stale project ID persisting in query editor when switching between datasources
+* Fix for CVE-2026-33671
+* Update OpenTelemetry SDK and other dependencies
+
 ## 1.6.3 (2026-04-05)
 * Add Project List Filter to restrict which projects appear in dropdowns using regex patterns
 * Add Log Bucket Filter with include/exclude support — prefix patterns with `!` to exclude matching buckets (e.g., `!.*/_Default` to hide Default buckets)

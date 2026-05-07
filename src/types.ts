@@ -54,6 +54,9 @@ export interface Query extends DataQuery {
   projectId: string;
   bucketId?: string;
   viewId?: string;
+  /** Tracks which datasource instance last set the projectId.
+   *  Used to detect datasource switches and reset stale project IDs. */
+  _datasourceUid?: string;
 }
 
 /**

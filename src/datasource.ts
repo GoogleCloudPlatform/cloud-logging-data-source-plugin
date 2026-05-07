@@ -131,6 +131,11 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
    */
   filterProjects(projects: string[]): string[] {
     const raw = this.instanceSettings.jsonData.projectListFilter;
+    console.warn('[DS filterProjects]', {
+      uid: this.uid,
+      rawFilter: raw,
+      inputProjects: projects,
+    });
     if (!raw || !raw.trim()) {
       return projects;
     }
@@ -141,6 +146,7 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     if (patterns.length === 0) {
       return projects;
     }
+    console.warn('[DS filterProjects] patterns:', patterns);
     const regexes = patterns.map((p: string) => {
       try {
         return new RegExp(`^${p}$`);
@@ -149,7 +155,9 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
         return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
       }
     });
-    return projects.filter((proj: string) => regexes.some((r: RegExp) => r.test(proj)));
+    const result = projects.filter((proj: string) => regexes.some((r: RegExp) => r.test(proj)));
+    console.warn('[DS filterProjects] result:', result);
+    return result;
   }
 
   /**
