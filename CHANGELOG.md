@@ -1,8 +1,8 @@
 # Changelog
 ## 1.6.4 (2026-05-06)
+* **Bump minimum Grafana version to 11.2.0.** Earlier versions have an upstream `<Select>` rendering bug ([#89530](https://github.com/grafana/grafana/issues/89530), fixed in 11.2.0) that can cause the project picker to visually display stale options after switching datasources in Explore.
 * Fix stale project ID persisting in query editor when switching between datasources
 * Update OpenTelemetry SDK and other dependencies
-* **Recommended Grafana version: 11.2.0 or later.** Earlier versions have an upstream `<Select>` rendering issue ([#89530](https://github.com/grafana/grafana/issues/89530), fixed in 11.2.0) that can cause the project picker to visually display stale options after switching datasources in Explore, even though the underlying query state is correct.
 
 ## 1.6.3 (2026-04-05)
 * Add Project List Filter to restrict which projects appear in dropdowns using regex patterns
