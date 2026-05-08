@@ -96,7 +96,7 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 		if strings.HasSuffix(typeUrl, "AuditLog") {
 			var a alpb.AuditLog
 			if err := t.ProtoPayload.UnmarshalTo(&a); err != nil {
-				log.DefaultLogger.Error("Could not get AuditLog payload out of LogEntry: %v", err)
+				log.DefaultLogger.Error("Could not get AuditLog payload out of LogEntry", "error", err)
 			} else {
 				byteArr, _ := json.Marshal(a)
 				var inInterface map[string]*structpb.Value
@@ -108,7 +108,7 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 		} else if strings.HasSuffix(typeUrl, "RequestLog") {
 			var r rlpb.RequestLog
 			if err := t.ProtoPayload.UnmarshalTo(&r); err != nil {
-				log.DefaultLogger.Error("Could not get RequestLog payload out of LogEntry: %v", err)
+				log.DefaultLogger.Error("Could not get RequestLog payload out of LogEntry", "error", err)
 			} else {
 				byteArr, _ := json.Marshal(r)
 				var inInterface map[string]*structpb.Value

@@ -74,6 +74,32 @@ func universeDomainOpts(universeDomain string) []option.ClientOption {
 	return []option.ClientOption{option.WithUniverseDomain(universeDomain)}
 }
 
+// newClientFromOpts builds the three GCP clients that back Client. If any
+// constructor fails, the previously-created clients are closed so we don't
+// leak gRPC connections.
+func newClientFromOpts(ctx context.Context, opts []option.ClientOption) (*Client, error) {
+	lClient, err := logging.NewClient(ctx, opts...)
+	if err != nil {
+		return nil, err
+	}
+	rClient, err := resourcemanager.NewProjectsClient(ctx, opts...)
+	if err != nil {
+		lClient.Close()
+		return nil, err
+	}
+	configClient, err := logging.NewConfigClient(ctx, opts...)
+	if err != nil {
+		rClient.Close()
+		lClient.Close()
+		return nil, err
+	}
+	return &Client{
+		lClient:      lClient,
+		rClient:      rClient,
+		configClient: configClient,
+	}, nil
+}
+
 // NewClient creates a new Client using jsonCreds for authentication
 func NewClient(ctx context.Context, jsonCreds []byte, universeDomain string) (*Client, error) {
 	opts := append([]option.ClientOption{
@@ -81,24 +107,7 @@ func NewClient(ctx context.Context, jsonCreds []byte, universeDomain string) (*C
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}, universeDomainOpts(universeDomain)...)
 
-	client, err := logging.NewClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	rClient, err := resourcemanager.NewProjectsClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	configClient, err := logging.NewConfigClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &Client{
-		lClient:      client,
-		rClient:      rClient,
-		configClient: configClient,
-	}, nil
+	return newClientFromOpts(ctx, opts)
 }
 
 // NewClient creates a new Clients using GCE metadata for authentication
@@ -107,23 +116,7 @@ func NewClientWithGCE(ctx context.Context, universeDomain string) (*Client, erro
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}, universeDomainOpts(universeDomain)...)
 
-	client, err := logging.NewClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	rClient, err := resourcemanager.NewProjectsClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	configClient, err := logging.NewConfigClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &Client{
-		lClient:      client,
-		rClient:      rClient,
-		configClient: configClient,
-	}, nil
+	return newClientFromOpts(ctx, opts)
 }
 
 // NewClient creates a new Clients using service account impersonation
@@ -154,23 +147,7 @@ func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersona
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}, universeDomainOpts(universeDomain)...)
 
-	client, err := logging.NewClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	rClient, err := resourcemanager.NewProjectsClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	configClient, err := logging.NewConfigClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &Client{
-		lClient:      client,
-		rClient:      rClient,
-		configClient: configClient,
-	}, nil
+	return newClientFromOpts(ctx, opts)
 }
 
 // NewClientWithAccessToken creates a new Client using an access token for authentication.
@@ -183,26 +160,7 @@ func NewClientWithAccessToken(ctx context.Context, accessToken string, universeD
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}, universeDomainOpts(universeDomain)...)
 
-	client, err := logging.NewClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	rClient, err := resourcemanager.NewProjectsClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	configClient, err := logging.NewConfigClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Client{
-		lClient:      client,
-		rClient:      rClient,
-		configClient: configClient,
-	}, nil
+	return newClientFromOpts(ctx, opts)
 }
 
 // NewClientWithPassThrough creates a new Clients using Oauth browser credentials
@@ -221,23 +179,7 @@ func NewClientWithPassThrough(ctx context.Context, headers map[string]string, un
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}, universeDomainOpts(universeDomain)...)
 
-	client, err := logging.NewClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	rClient, err := resourcemanager.NewProjectsClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	configClient, err := logging.NewConfigClient(ctx, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return &Client{
-		lClient:      client,
-		rClient:      rClient,
-		configClient: configClient,
-	}, nil
+	return newClientFromOpts(ctx, opts)
 }
 
 // Close closes the underlying connection to the GCP API
