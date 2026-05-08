@@ -1,8 +1,14 @@
 # Changelog
+## 1.6.4 (2026-05-06)
+* Fix stale project ID persisting in query editor when switching between datasources
+* Update OpenTelemetry SDK and other dependencies
+* **Recommended Grafana version: 11.2.0 or later.** Earlier versions have an upstream `<Select>` rendering issue ([#89530](https://github.com/grafana/grafana/issues/89530), fixed in 11.2.0) that can cause the project picker to visually display stale options after switching datasources in Explore, even though the underlying query state is correct.
+
 ## 1.6.3 (2026-04-05)
 * Add Project List Filter to restrict which projects appear in dropdowns using regex patterns
 * Add Log Bucket Filter with include/exclude support — prefix patterns with `!` to exclude matching buckets (e.g., `!.*/_Default` to hide Default buckets)
 * Fix race condition in variable query where default project could be unresolved before bucket/view queries run
+* Fix for [CVE-2026-33671](https://nvd.nist.gov/vuln/detail/CVE-2026-33671) (picomatch ReDoS — bumped via yarn `resolutions` override)
 
 ## 1.6.2 (2026-03-18)
 * Fix project dropdown search failing with "contains global restriction" error

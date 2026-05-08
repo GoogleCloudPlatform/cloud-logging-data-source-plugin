@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-import React, { KeyboardEvent, useCallback, useEffect, useMemo, useState } from 'react';
+import React, { KeyboardEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { QueryEditorProps, SelectableValue } from '@grafana/data';
-import { Alert, InlineField, InlineFieldRow, AsyncSelect, LinkButton, Select, TextArea, Tooltip } from '@grafana/ui';
+import { Alert, InlineField, InlineFieldRow, LinkButton, Select, TextArea, Tooltip } from '@grafana/ui';
 import { DataSource } from './datasource';
 import { CloudLoggingOptions, defaultQuery, Query } from './types';
 
@@ -34,33 +34,107 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     }
   };
 
-  // Apply defaults if needed, and validate against project list filter
-  if (!query.projectId) {
-    datasource.getDefaultProject().then(r => {
-      if (datasource.filterProjects([r]).length > 0) {
-        query.projectId = r;
+  // Keep a ref to the latest query so async callbacks avoid stale closures
+  const queryRef = useRef(query);
+  queryRef.current = query;
+
+  // Compute normalized queryText as a derived value (never mutate the prop directly)
+  const effectiveQueryText = query.query ?? query.queryText ?? defaultQuery.queryText;
+
+  // Initialization effect: validates the carried-over project against the
+  // datasource's actual filtered project list. The list is the source of truth;
+  // the regex filter alone is insufficient because "no filter" passes everything,
+  // so a stale projectId from a different datasource would slip through.
+  useEffect(() => {
+    let cancelled = false;
+
+    const computeTextUpdates = (q: Query): Partial<Query> => {
+      const norm: Partial<Query> = {};
+      if (q.query) {
+        norm.queryText = q.query;
+        norm.query = undefined;
       }
-    });
-  } else if (!query.projectId.startsWith('$') && datasource.filterProjects([query.projectId]).length === 0) {
-    // Previously selected project no longer passes the filter — clear it
-    query.projectId = '';
-  }
+      if ((norm.queryText ?? q.queryText) == null) {
+        norm.queryText = defaultQuery.queryText;
+      }
+      return norm;
+    };
 
-  if (query.bucketId && !query.bucketId.startsWith('$') && datasource.filterBuckets([query.bucketId]).length === 0) {
-    // Previously selected bucket no longer passes the filter — clear it
-    query.bucketId = '';
-  }
+    (async () => {
+      const latestQuery = queryRef.current;
+      const textUpdates = computeTextUpdates(latestQuery);
+      const currentProjectId = latestQuery.projectId;
 
-  // Check query field from query params to support default way of propagating query from other parts of grafana.
-  if (query.query) {
-    query.queryText = query.query;
-    query.query = undefined;
-  }
+      if (currentProjectId && currentProjectId.startsWith('$')) {
+        if (!cancelled && Object.keys(textUpdates).length > 0) {
+          onChange({ ...latestQuery, ...textUpdates });
+        }
+        return;
+      }
 
-  if (query.queryText == null) {
-    query.queryText = defaultQuery.queryText;
-  }
+      const defaultProject = await datasource.getDefaultProject();
+      if (cancelled) { return; }
 
+      let cachedList: string[] | null = null;
+      let isValid = false;
+
+      if (!currentProjectId) {
+        isValid = false;
+      } else if (datasource.filterProjects([currentProjectId]).length === 0) {
+        isValid = false;
+      } else {
+        try {
+          cachedList = await datasource.getFilteredProjects();
+          if (cancelled) { return; }
+          isValid = cachedList.includes(currentProjectId);
+        } catch {
+          // Transient API error — assume valid so we don't reset a saved
+          // project on a flaky network. The eventual query will surface
+          // any real access error.
+          isValid = true;
+        }
+      }
+
+      if (isValid) {
+        const updates: Partial<Query> = { ...textUpdates };
+        if (latestQuery.bucketId && !latestQuery.bucketId.startsWith('$') &&
+          datasource.filterBuckets([latestQuery.bucketId]).length === 0) {
+          updates.bucketId = '';
+        }
+        if (Object.keys(updates).length > 0) {
+          onChange({ ...latestQuery, ...updates });
+        }
+        return;
+      }
+
+      // Pick a replacement project.
+      let newProjectId = '';
+      if (defaultProject && datasource.filterProjects([defaultProject]).length > 0) {
+        newProjectId = defaultProject;
+      } else {
+        let list = cachedList;
+        if (list === null) {
+          try {
+            list = await datasource.getFilteredProjects();
+            if (cancelled) { return; }
+          } catch {
+            list = null;
+          }
+        }
+        if (list && list.length > 0) {
+          newProjectId = list[0];
+        }
+      }
+
+      if (cancelled) { return; }
+      onChange({ ...latestQuery, ...textUpdates, projectId: newProjectId, bucketId: '', viewId: '' });
+      if (newProjectId) {
+        onRunQuery();
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [datasource]);
 
   const [fetchError, setFetchError] = useState<string | undefined>();
 
@@ -82,41 +156,89 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     return text;
   };
 
-  const loadProjects = useCallback((inputValue: string): Promise<Array<SelectableValue<string>>> => {
-    return datasource.getFilteredProjects(inputValue || undefined).then(res => {
-      setFetchError(undefined);
-      return res.map(project => ({
-        label: project,
-        value: project,
-      }));
-    }).catch(err => {
-      setFetchError(sanitizeFetchError(err));
-      return [];
-    });
+  // Project list state, tagged with the DS uid it was loaded for. The uid tag
+  // lets the picker's `options` derivation (`projectsForCurrentDs` below)
+  // return [] whenever the loaded data doesn't belong to the current DS —
+  // preventing react-select from auto-selecting/displaying a stale option
+  // (e.g. the only entry in test1's list when we've switched to test2 but
+  // test2's load hasn't resolved yet).
+  const [projectsState, setProjectsState] = useState<{
+    uid: string | null;
+    list: Array<SelectableValue<string>>;
+  }>({ uid: null, list: [] });
+  const [projectsLoading, setProjectsLoading] = useState(false);
+  const searchTimer = useRef<ReturnType<typeof setTimeout>>();
+  const projectsForCurrentDs = projectsState.uid === datasource.uid
+    ? projectsState.list
+    : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadingForUid = datasource.uid;
+    setProjectsLoading(true);
+    datasource.getFilteredProjects()
+      .then(res => {
+        if (cancelled) { return; }
+        setProjectsState({
+          uid: loadingForUid,
+          list: res.map(project => ({ label: project, value: project })),
+        });
+        setFetchError(undefined);
+      })
+      .catch(err => {
+        if (cancelled) { return; }
+        setProjectsState({ uid: loadingForUid, list: [] });
+        setFetchError(sanitizeFetchError(err));
+      })
+      .finally(() => {
+        if (!cancelled) { setProjectsLoading(false); }
+      });
+    return () => {
+      cancelled = true;
+      if (searchTimer.current) { clearTimeout(searchTimer.current); }
+    };
+  }, [datasource]);
+
+  const onProjectSearchChange = useCallback((value: string) => {
+    if (searchTimer.current) { clearTimeout(searchTimer.current); }
+    const searchDsUid = datasource.uid;
+    setProjectsLoading(true);
+    searchTimer.current = setTimeout(() => {
+      datasource.getFilteredProjects(value || undefined)
+        .then(res => {
+          // Discard the response if the datasource changed during the debounce
+          // or in-flight fetch. Without this, a late search response from the
+          // OLD datasource could clobber a freshly-loaded list from the new one.
+          if (searchDsUid !== datasource.uid) { return; }
+          setProjectsState({
+            uid: searchDsUid,
+            list: res.map(project => ({ label: project, value: project })),
+          });
+          setFetchError(undefined);
+        })
+        .catch(err => {
+          if (searchDsUid !== datasource.uid) { return; }
+          setFetchError(sanitizeFetchError(err));
+        })
+        .finally(() => {
+          if (searchDsUid === datasource.uid) { setProjectsLoading(false); }
+        });
+    }, 300);
   }, [datasource]);
 
   const [buckets, setBuckets] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
-    if (!query.projectId) {
-      datasource.getDefaultProject().then(r => {
-        query.projectId = r;
-        datasource.getFilteredBuckets(query.projectId).then(res => {
-          setBuckets(res.map(bucket => ({
-            label: bucket,
-            value: bucket,
-          })));
-        }).catch(err => setFetchError(sanitizeFetchError(err)));
-      });
-    } else if (!query.projectId.startsWith('$')) {
-      datasource.getFilteredBuckets(query.projectId).then(res => {
-        setBuckets(res.map(bucket => ({
-          label: bucket,
-          value: bucket,
-        })));
-        setFetchError(undefined);
-      }).catch(err => setFetchError(sanitizeFetchError(err)));
-    }
-  }, [datasource, query.projectId]);
+    if (!query.projectId || query.projectId.startsWith('$')) { return; }
+    if (projectsLoading) { return; }
+    if (projectsForCurrentDs.length > 0 && !projectsForCurrentDs.some(p => p.value === query.projectId)) { return; }
+    datasource.getFilteredBuckets(query.projectId).then(res => {
+      setBuckets(res.map(bucket => ({
+        label: bucket,
+        value: bucket,
+      })));
+      setFetchError(undefined);
+    }).catch(err => setFetchError(sanitizeFetchError(err)));
+  }, [datasource, query.projectId, projectsLoading, projectsForCurrentDs]);
 
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
@@ -141,7 +263,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
    * Keep an up-to-date URI that links to the equivalent query in the GCP console
    */
   const gcpConsoleURI = useMemo<string | undefined>(() => {
-    if (!query.queryText) {
+    if (!effectiveQueryText) {
       return undefined;
     }
 
@@ -169,7 +291,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       storageScope = `;storageScope=${scopePath.replace(/\//g, '%2F')}`;
     }
 
-    const encodedText = encodeURIComponent(`${query.queryText}`).replace(/[!'()*]/g, function (c) {
+    const encodedText = encodeURIComponent(`${effectiveQueryText}`).replace(/[!'()*]/g, function (c) {
       if (c === '(' || c === ')') {
         return '%25' + c.charCodeAt(0).toString(16);
       }
@@ -197,7 +319,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     <>
       <InlineFieldRow>
         <InlineField label='Project ID'>
-          <AsyncSelect
+          <Select
+            key={datasource.uid}
             width={30}
             allowCustomValue
             formatCreateLabel={(v) => `Use project: ${v}`}
@@ -207,8 +330,18 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
               bucketId: query.bucketId && query.bucketId.startsWith('$') ? query.bucketId : "",
               viewId: query.viewId && query.viewId.startsWith('$') ? query.viewId : "",
             })}
-            loadOptions={loadProjects}
-            defaultOptions
+            options={projectsForCurrentDs}
+            isLoading={projectsLoading}
+            onInputChange={onProjectSearchChange}
+            filterOption={() => true}
+            // Pass value as a self-contained literal — do NOT derive it by
+            // looking up query.projectId in the options list. react-select's
+            // internal `cleanValue(value, options)` reconciliation lags under
+            // React 18 concurrent rendering, which would make the picker
+            // visually stuck on stale data on DS switch (only "fixed" by
+            // opening DevTools, which forces a paint flush).
+            // The init effect keeps query.projectId valid; the picker just
+            // displays whatever it says. See react-select#4936.
             value={query.projectId ? { label: query.projectId, value: query.projectId } : undefined}
             placeholder="Select Project"
             inputId={`${query.refId}-project`}
@@ -252,7 +385,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       <TextArea
         name="Query"
         className="slate-query-field"
-        value={query.queryText}
+        value={effectiveQueryText}
         rows={10}
         placeholder="Enter a Cloud Logging query (Run with Shift+Enter)"
         onBlur={onRunQuery}
