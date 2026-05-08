@@ -267,7 +267,13 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 			})
 		}
 	} else if resource == "logbuckets" {
-		reqUrl, _ := url.Parse(req.URL)
+		reqUrl, err := url.Parse(req.URL)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   jsonErrorBody("Invalid request URL"),
+			})
+		}
 		params, _ := url.ParseQuery(reqUrl.RawQuery)
 
 		if params.Get("ProjectId") == "" {
@@ -294,7 +300,13 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 			})
 		}
 	} else if resource == "logviews" {
-		reqUrl, _ := url.Parse(req.URL)
+		reqUrl, err := url.Parse(req.URL)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   jsonErrorBody("Invalid request URL"),
+			})
+		}
 		params, _ := url.ParseQuery(reqUrl.RawQuery)
 
 		if params.Get("ProjectId") == "" {
