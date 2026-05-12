@@ -5,7 +5,7 @@ go 1.25.7
 require (
 	cloud.google.com/go/logging v1.13.0
 	cloud.google.com/go/resourcemanager v1.10.7
-	github.com/grafana/grafana-google-sdk-go v0.2.1
+	github.com/grafana/grafana-google-sdk-go v0.4.2
 	github.com/grafana/grafana-plugin-sdk-go v0.290.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/oauth2 v0.35.0
