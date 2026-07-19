@@ -16,7 +16,8 @@
 
 import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
 import { ConnectionConfig, GoogleAuthType } from '@grafana/google-sdk';
-import { Checkbox, Field, Input, SecretInput, Select, TextArea } from '@grafana/ui';
+import { DataSourcePicker } from '@grafana/runtime';
+import { Checkbox, Field, FieldSet, Input, SecretInput, Select, TextArea } from '@grafana/ui';
 import React, { PureComponent } from 'react';
 import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData } from './types';
 
@@ -162,10 +163,50 @@ export class ConfigEditor extends PureComponent<Props> {
           </>
         ) : null}
         {defaultProject(this.props)}
+        {logsToTraces(this.props)}
       </>
     );
   }
 }
+
+const logsToTraces = (props: Props) => {
+  const { options, onOptionsChange } = props;
+  return (
+    <FieldSet label="Logs to traces">
+      <Field
+        label="Trace data source"
+        description="Log entries containing a trace ID get a 'View trace' link that opens the selected tracing data source (e.g. Google Cloud Trace)."
+        htmlFor="logs-to-traces-datasource"
+      >
+        <DataSourcePicker
+          inputId="logs-to-traces-datasource"
+          tracing={true}
+          noDefault={true}
+          width={40}
+          current={options.jsonData.logsToTraces?.datasourceUid ?? null}
+          onChange={(ds) =>
+            onOptionsChange({
+              ...options,
+              jsonData: {
+                ...options.jsonData,
+                logsToTraces: { datasourceUid: ds.uid },
+              },
+            })
+          }
+          onClear={() =>
+            onOptionsChange({
+              ...options,
+              jsonData: {
+                ...options.jsonData,
+                logsToTraces: undefined,
+              },
+            })
+          }
+        />
+      </Field>
+    </FieldSet>
+  );
+};
 
 const defaultProject = (props: Props) => {
   const { options, onOptionsChange } = props;

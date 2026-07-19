@@ -105,6 +105,20 @@ Patterns are [regular expressions](https://developer.mozilla.org/en-US/docs/Web/
 
 If a pattern contains invalid regex syntax, it is treated as a literal string match.
 
+### Logs to traces
+
+You can link log entries to a tracing data source (e.g. [Google Cloud Trace](https://grafana.com/grafana/plugins/googlecloud-trace-datasource/)). In the data source settings, under **Logs to traces**, select the trace data source. Once configured, any log entry written with the [LogEntry `trace` field](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry) shows a `traceId` field with a **View trace** link in the log details — clicking it opens the trace in the selected data source.
+
+Provisioning example:
+
+```yaml
+jsonData:
+  logsToTraces:
+    datasourceUid: my-cloud-trace-datasource-uid
+```
+
+For the reverse direction (from a trace span to its logs), configure **Trace to logs** in the Google Cloud Trace data source settings.
+
 ### An alternative way to provision the data source
 
 After the plugin is installed, you can define and configure the data source in YAML files as part of Grafana's provisioning system, similar to [the Google Cloud Monitoring plugin](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/#provision-the-data-source). For more information about provisioning, and for available configuration options, refer to [Provisioning Grafana](https://grafana.com/docs/grafana/latest/administration/provisioning/#data-sources).

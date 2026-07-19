@@ -1,4 +1,8 @@
 # Changelog
+## Unreleased
+* Add **Logs to traces** correlation: select a tracing data source (e.g. Google Cloud Trace) in the data source settings, and log entries carrying a trace ID get a "View trace" link in the log details
+* Support queries arriving via Grafana's trace-to-logs span links (`query` field): interpolate template variables and fall back to the configured default project when the span link carries no project ID
+
 ## 1.6.4 (2026-05-06)
 * **Bump minimum Grafana version to 11.2.0.** Earlier versions have an upstream `<Select>` rendering bug ([#89530](https://github.com/grafana/grafana/issues/89530), fixed in 11.2.0) that can cause the project picker to visually display stale options after switching datasources in Explore.
 * Fix stale project ID persisting in query editor when switching between datasources

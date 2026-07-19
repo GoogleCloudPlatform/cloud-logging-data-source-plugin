@@ -33,6 +33,14 @@ export const authTypes: Array<SelectableValue<string>> = [
 ];
 
 /**
+ * Options for the logs-to-traces correlation: log entries carrying a trace ID
+ * get a data link that opens the selected tracing data source.
+ */
+export interface LogsToTracesOptions {
+  datasourceUid?: string;
+}
+
+/**
  * DataSourceOptionsExt adds two more fields to DataSourceOptions
  */
 export interface DataSourceOptionsExt extends DataSourceOptions {
@@ -43,6 +51,7 @@ export interface DataSourceOptionsExt extends DataSourceOptions {
   universeDomain?: string;
   projectListFilter?: string;
   logBucketFilter?: string;
+  logsToTraces?: LogsToTracesOptions;
 }
 
 /**
