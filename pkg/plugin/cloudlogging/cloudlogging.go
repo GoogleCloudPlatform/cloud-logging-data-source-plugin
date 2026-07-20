@@ -134,7 +134,14 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 		}
 	}
 
-	// Add trace data
+	// Add trace data.
+	// Contract: the frontend's logs-to-traces feature (src/datasource.ts,
+	// addTraceLinkField) depends on the `trace` and `traceId` label names and
+	// on `trace` carrying the raw LogEntry value in the canonical
+	// `projects/<project>/traces/<id>` form — it re-parses that path to
+	// extract the project for the "View trace" link. Renaming these labels or
+	// changing their format silently breaks that feature; no test crosses the
+	// Go/TS boundary.
 	traceId := entry.GetTrace()
 	spanId := entry.GetSpanId()
 	if traceId != "" {

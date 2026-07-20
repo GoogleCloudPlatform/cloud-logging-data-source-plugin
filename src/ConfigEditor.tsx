@@ -171,37 +171,31 @@ export class ConfigEditor extends PureComponent<Props> {
 
 const logsToTraces = (props: Props) => {
   const { options, onOptionsChange } = props;
+  const setLogsToTraces = (uid?: string) =>
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...options.jsonData,
+        logsToTraces: uid ? { datasourceUid: uid } : undefined,
+      },
+    });
   return (
     <FieldSet label="Logs to traces">
       <Field
         label="Trace data source"
-        description="Log entries containing a trace ID get a 'View trace' link that opens the selected tracing data source (e.g. Google Cloud Trace)."
+        description="Log entries containing a trace ID get a 'View trace' link that opens the selected Google Cloud Trace data source."
         htmlFor="logs-to-traces-datasource"
       >
         <DataSourcePicker
           inputId="logs-to-traces-datasource"
-          tracing={true}
+          // The link query built in datasource.ts uses Cloud Trace's query
+          // shape, so only that datasource type can consume it.
+          filter={(ds) => ds.type === 'googlecloud-trace-datasource'}
           noDefault={true}
           width={40}
           current={options.jsonData.logsToTraces?.datasourceUid ?? null}
-          onChange={(ds) =>
-            onOptionsChange({
-              ...options,
-              jsonData: {
-                ...options.jsonData,
-                logsToTraces: { datasourceUid: ds.uid },
-              },
-            })
-          }
-          onClear={() =>
-            onOptionsChange({
-              ...options,
-              jsonData: {
-                ...options.jsonData,
-                logsToTraces: undefined,
-              },
-            })
-          }
+          onChange={(ds) => setLogsToTraces(ds.uid)}
+          onClear={() => setLogsToTraces()}
         />
       </Field>
     </FieldSet>

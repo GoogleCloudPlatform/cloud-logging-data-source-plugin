@@ -107,7 +107,7 @@ If a pattern contains invalid regex syntax, it is treated as a literal string ma
 
 ### Logs to traces
 
-You can link log entries to a tracing data source (e.g. [Google Cloud Trace](https://grafana.com/grafana/plugins/googlecloud-trace-datasource/)). In the data source settings, under **Logs to traces**, select the trace data source. Once configured, any log entry written with the [LogEntry `trace` field](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry) shows a `traceId` field with a **View trace** link in the log details — clicking it opens the trace in the selected data source.
+You can link log entries to a [Google Cloud Trace](https://grafana.com/grafana/plugins/googlecloud-trace-datasource/) data source. In the data source settings, under **Logs to traces**, select the Google Cloud Trace data source. Once configured, any log entry written with the [LogEntry `trace` field](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry) shows a `traceId` field with a **View trace** link in the log details — clicking it opens the trace in the selected data source. The link carries the project parsed from the entry's `projects/<project>/traces/<id>` path; if the `trace` value is not in that form, the data source's default project is used, and if no project can be determined the link is omitted.
 
 Provisioning example:
 
