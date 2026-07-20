@@ -117,6 +117,8 @@ jsonData:
     datasourceUid: my-cloud-trace-datasource-uid
 ```
 
+> **Note: a "View trace" link is not a guarantee that the trace was recorded.** For services with automatic request tracing (Cloud Run, App Engine, GKE ingress, and other services behind Google's HTTP load balancing), every request log entry carries a trace ID, but Cloud Trace only stores traces for **sampled** requests — and the built-in sampling rate is low (roughly 0.1 traces per second per instance for Cloud Run). Clicking **View trace** for an unsampled request shows a "trace not found" result; this is expected and matches the behavior of the trace links in the Google Cloud console's Logs Explorer. To make more links resolve, increase sampling on the application side: instrument the service with [OpenTelemetry](https://cloud.google.com/trace/docs/setup) and configure your own sampling rate, or force sampling on individual requests by sending an `X-Cloud-Trace-Context: <trace-id>/<span-id>;o=1` header (or a W3C `traceparent` header with the sampled flag set). Note that Cloud Trace bills per ingested span, so consider cost before sampling at 100% on high-traffic services.
+
 For the reverse direction (from a trace span to its logs), configure **Trace to logs** in the Google Cloud Trace data source settings.
 
 ### An alternative way to provision the data source
