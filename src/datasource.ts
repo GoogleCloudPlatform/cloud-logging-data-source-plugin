@@ -14,9 +14,19 @@
  * limitations under the License.
  */
 
-import { DataSourceInstanceSettings, QueryFixAction, ScopedVars } from '@grafana/data';
-import { DataSourceWithBackend, getBackendSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
-import { lastValueFrom } from 'rxjs';
+import {
+  DataFrame,
+  DataQueryRequest,
+  DataQueryResponse,
+  DataSourceInstanceSettings,
+  Field,
+  FieldType,
+  QueryFixAction,
+  ScopedVars,
+} from '@grafana/data';
+import { DataSourceWithBackend, getBackendSrv, getDataSourceSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
+import { from, lastValueFrom, Observable } from 'rxjs';
+import { map, mergeMap } from 'rxjs/operators';
 import { CloudLoggingOptions, Query } from './types';
 import { CloudLoggingVariableSupport } from './variables';
 
@@ -79,13 +89,20 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
    * @returns Project ID
    */
   async getDefaultProject() {
-    const { defaultProject, authenticationType } = this.instanceSettings.jsonData;
-    if (authenticationType === 'gce') {
+    if (this.instanceSettings.jsonData.authenticationType === 'gce') {
       await this.ensureGCEDefaultProject();
-      return this.instanceSettings.jsonData.gceDefaultProject || "";
     }
+    return this.defaultProjectSync();
+  }
 
-    return defaultProject || '';
+  /**
+   * Synchronous view of the default project. For GCE auth this reads the
+   * cached `gceDefaultProject`, which is only populated once
+   * {@link ensureGCEDefaultProject} has resolved.
+   */
+  private defaultProjectSync(): string {
+    const { authenticationType, defaultProject, gceDefaultProject } = this.instanceSettings.jsonData;
+    return (authenticationType === 'gce' ? gceDefaultProject : defaultProject) || '';
   }
 
   async getGCEDefaultProject() {
@@ -255,11 +272,99 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     return this.getResource(`logViews`, { "ProjectId": projectId, "BucketId": bucketId });
   }
 
+  /**
+   * After performing a query, attach logs-to-traces data links when a
+   * tracing data source is configured in the "Logs to traces" settings.
+   *
+   * @param request  {@link DataQueryRequest<Query>} a data query request
+   * @returns a modified {@link Observable<DataQueryResponse>}
+   */
+  query(request: DataQueryRequest<Query>): Observable<DataQueryResponse> {
+    // When a target has no projectId, applyTemplateVariables falls back to
+    // defaultProjectSync(), which for GCE auth reads a lazily-populated
+    // cache; resolve it before the backend call so the fallback is available.
+    const needsDefaultProject = request.targets.some((t) => !t.hide && !t.projectId);
+    const base =
+      needsDefaultProject && this.instanceSettings.jsonData.authenticationType === 'gce'
+        ? from(this.ensureGCEDefaultProject().catch(() => {})).pipe(mergeMap(() => super.query(request)))
+        : super.query(request);
+    const uid = this.instanceSettings.jsonData.logsToTraces?.datasourceUid;
+    const traceDs = uid ? getDataSourceSrv().getInstanceSettings(uid) : undefined;
+    if (!traceDs) {
+      return base;
+    }
+    return base.pipe(
+      map((response) => ({
+        ...response,
+        data: response.data.map((frame: DataFrame) => this.addTraceLinkField(frame, traceDs.uid, traceDs.name)),
+      }))
+    );
+  }
+
+  /**
+   * The backend emits one frame per log entry, with the entry's trace data
+   * attached as labels on the `content` field (`trace` holds the full
+   * `projects/<project>/traces/<id>` path, `traceId` the bare ID). Surface
+   * the trace ID as its own field carrying an internal data link, so the
+   * log details panel renders a "View trace" link that opens the configured
+   * tracing data source — the same mechanism as Loki's derived fields.
+   */
+  addTraceLinkField(frame: DataFrame, datasourceUid: string, datasourceName: string): DataFrame {
+    const contentField = frame.fields.find((f) => f.name === 'content');
+    const labels = contentField?.labels;
+    const traceId = labels?.['traceId'];
+    if (!contentField || !labels || !traceId || frame.fields.some((f) => f.name === 'traceId')) {
+      return frame;
+    }
+    // LogEntry.trace is a free-form string; when it isn't the canonical
+    // resource path, fall back to the default project, and if that is also
+    // unset skip the link entirely — Cloud Trace errors on an empty project,
+    // so no link beats a broken one.
+    const projectId =
+      labels['trace']?.match(/^projects\/([^/]+)\/traces\//)?.[1] ?? this.defaultProjectSync();
+    if (!projectId) {
+      return frame;
+    }
+    // The linked field replaces the label in the log details view; leaving
+    // both would show `traceId` twice (once without the link).
+    delete labels['traceId'];
+    const rowCount = contentField.values.length;
+    frame.fields.push({
+      name: 'traceId',
+      type: FieldType.string,
+      config: {
+        links: [
+          {
+            title: 'View trace',
+            url: '',
+            internal: {
+              datasourceUid,
+              datasourceName,
+              query: { refId: 'trace', queryType: 'traceID', traceId, projectId },
+            },
+          },
+        ],
+      },
+      // Grafana >= 10 accepts plain arrays as field values at runtime; the
+      // cast only satisfies the bundled @grafana/data 9.x typings (Vector<T>).
+      values: new Array(rowCount).fill(traceId),
+    } as unknown as Field);
+    return frame;
+  }
+
   applyTemplateVariables(query: Query, scopedVars: ScopedVars): Query {
     return {
       ...query,
       queryText: this.templateSrv.replace(query.queryText, scopedVars),
-      projectId: this.templateSrv.replace(query.projectId, scopedVars),
+      query: this.templateSrv.replace(query.query, scopedVars),
+      // Trace-to-logs span links built by Grafana core carry only a `query`
+      // string and no project; fall back to the default project so the
+      // backend doesn't request the invalid resource "projects/". The
+      // fallback is scoped to that span-link shape (`query` set, no project)
+      // so a dashboard query whose projectId resolves to empty still fails
+      // loudly instead of silently reading from the default project.
+      projectId:
+        this.templateSrv.replace(query.projectId, scopedVars) || (query.query ? this.defaultProjectSync() : ''),
       bucketId: this.templateSrv.replace(query.bucketId, scopedVars),
       viewId: this.templateSrv.replace(query.viewId, scopedVars),
     };

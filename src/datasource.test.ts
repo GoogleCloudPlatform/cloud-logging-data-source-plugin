@@ -14,10 +14,21 @@
  * limitations under the License.
  */
 
-import { DataSourcePluginMeta } from '@grafana/data';
+import { ArrayVector, DataFrame, DataSourcePluginMeta, FieldType, Labels, ScopedVars } from '@grafana/data';
+import { DataSourceWithBackend, TemplateSrv } from '@grafana/runtime';
 import { GoogleAuthType } from '@grafana/google-sdk';
 import { random } from 'lodash';
+import { lastValueFrom, of } from 'rxjs';
 import { DataSource } from './datasource';
+import { CloudLoggingOptions, Query } from './types';
+
+jest.mock('@grafana/runtime', () => ({
+    ...jest.requireActual('@grafana/runtime'),
+    getDataSourceSrv: () => ({
+        getInstanceSettings: (uid?: string) =>
+            uid === 'trace-uid' ? { uid: 'trace-uid', name: 'Google Cloud Trace' } : undefined,
+    }),
+}));
 
 
 describe('Google Cloud Logging Data Source', () => {
@@ -230,9 +241,134 @@ describe('Google Cloud Logging Data Source', () => {
             expect(ds.filterBuckets(allBuckets)).toEqual([]);
         });
     });
+
+    describe('logs to traces data links', () => {
+        const logFrame = (labels?: Labels): DataFrame => ({
+            name: 'insert-id-1',
+            refId: 'A',
+            length: 1,
+            fields: [
+                { name: 'time', type: FieldType.time, config: {}, values: new ArrayVector([1700000000000]) },
+                { name: 'content', type: FieldType.string, config: {}, labels, values: new ArrayVector(['hello']) },
+            ],
+        });
+
+        const runQuery = async (ds: DataSource, frame: DataFrame) => {
+            jest.spyOn(DataSourceWithBackend.prototype, 'query').mockReturnValue(of({ data: [frame] }));
+            return lastValueFrom(ds.query({ targets: [] } as unknown as Parameters<DataSource['query']>[0]));
+        };
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        it('appends a traceId field with an internal link when configured', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
+            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123', spanId: 'def' });
+            const response = await runQuery(ds, frame);
+
+            const traceField = response.data[0].fields.find((f: { name: string }) => f.name === 'traceId');
+            expect(traceField).toBeDefined();
+            expect(Array.from(traceField.values)).toEqual(['abc123']);
+            expect(traceField.config.links).toEqual([
+                {
+                    title: 'View trace',
+                    url: '',
+                    internal: {
+                        datasourceUid: 'trace-uid',
+                        datasourceName: 'Google Cloud Trace',
+                        query: { refId: 'trace', queryType: 'traceID', traceId: 'abc123', projectId: 'my-proj' },
+                    },
+                },
+            ]);
+        });
+
+        it('leaves frames untouched when logsToTraces is not configured', async () => {
+            const ds = makeDataSource();
+            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123' });
+            const response = await runQuery(ds, frame);
+            expect(response.data[0].fields).toHaveLength(2);
+        });
+
+        it('leaves frames untouched when the configured datasource does not resolve', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'gone' } });
+            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123' });
+            const response = await runQuery(ds, frame);
+            expect(response.data[0].fields).toHaveLength(2);
+        });
+
+        it('leaves frames without a traceId label untouched', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
+            const frame = logFrame({ level: 'info' });
+            const response = await runQuery(ds, frame);
+            expect(response.data[0].fields).toHaveLength(2);
+        });
+
+        it('removes the traceId label from the content field once the linked field is added', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
+            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123' });
+            const response = await runQuery(ds, frame);
+
+            const contentField = response.data[0].fields.find((f: { name: string }) => f.name === 'content');
+            expect(contentField.labels).toEqual({ trace: 'projects/my-proj/traces/abc123' });
+            expect(response.data[0].fields.find((f: { name: string }) => f.name === 'traceId')).toBeDefined();
+        });
+
+        it('falls back to the default project when the trace label is not a resource path', async () => {
+            const ds = makeDataSource({
+                logsToTraces: { datasourceUid: 'trace-uid' },
+                defaultProject: 'my-default-proj',
+            });
+            const frame = logFrame({ trace: 'abc123', traceId: 'abc123' });
+            const response = await runQuery(ds, frame);
+
+            const traceField = response.data[0].fields.find((f: { name: string }) => f.name === 'traceId');
+            expect(traceField.config.links[0].internal.query.projectId).toBe('my-default-proj');
+        });
+
+        it('skips the link when no project can be determined', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
+            const frame = logFrame({ trace: 'abc123', traceId: 'abc123' });
+            const response = await runQuery(ds, frame);
+            expect(response.data[0].fields).toHaveLength(2);
+        });
+    });
+
+    describe('applyTemplateVariables', () => {
+        const passthroughTemplateSrv = {
+            replace: (s?: string) => s ?? '',
+        } as unknown as TemplateSrv;
+
+        it('defaults projectId to the configured default project when the query has none', () => {
+            const ds = makeDataSource({ defaultProject: 'my-default-proj' }, passthroughTemplateSrv);
+            const query = { refId: 'A', query: '"abc123"' } as Query;
+            expect(ds.applyTemplateVariables(query, {} as ScopedVars).projectId).toBe('my-default-proj');
+        });
+
+        it('keeps the query projectId when present', () => {
+            const ds = makeDataSource({ defaultProject: 'my-default-proj' }, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'explicit-proj' } as Query;
+            expect(ds.applyTemplateVariables(query, {} as ScopedVars).projectId).toBe('explicit-proj');
+        });
+
+        it('uses the GCE default project for span-link queries under GCE auth', () => {
+            const ds = makeDataSource(
+                { authenticationType: GoogleAuthType.GCE, gceDefaultProject: 'gce-proj' },
+                passthroughTemplateSrv
+            );
+            const query = { refId: 'A', query: '"abc123"' } as Query;
+            expect(ds.applyTemplateVariables(query, {} as ScopedVars).projectId).toBe('gce-proj');
+        });
+
+        it('leaves projectId empty for non-span-link queries so misconfiguration fails loudly', () => {
+            const ds = makeDataSource({ defaultProject: 'my-default-proj' }, passthroughTemplateSrv);
+            const query = { refId: 'A' } as Query;
+            expect(ds.applyTemplateVariables(query, {} as ScopedVars).projectId).toBe('');
+        });
+    });
 });
 
-const makeDataSource = (overrides?: { projectListFilter?: string; logBucketFilter?: string }) => {
+const makeDataSource = (overrides?: Partial<CloudLoggingOptions>, templateSrv?: TemplateSrv) => {
     return new DataSource({
         id: random(100),
         type: 'googlecloud-logging-datasource',
@@ -245,5 +381,5 @@ const makeDataSource = (overrides?: { projectListFilter?: string; logBucketFilte
         },
         name: 'something',
         readOnly: true,
-    });
+    }, templateSrv);
 }

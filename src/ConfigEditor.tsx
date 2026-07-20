@@ -16,7 +16,8 @@
 
 import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
 import { ConnectionConfig, GoogleAuthType } from '@grafana/google-sdk';
-import { Checkbox, Field, Input, SecretInput, Select, TextArea } from '@grafana/ui';
+import { DataSourcePicker } from '@grafana/runtime';
+import { Checkbox, Field, FieldSet, Input, SecretInput, Select, TextArea } from '@grafana/ui';
 import React, { PureComponent } from 'react';
 import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData } from './types';
 
@@ -162,10 +163,44 @@ export class ConfigEditor extends PureComponent<Props> {
           </>
         ) : null}
         {defaultProject(this.props)}
+        {logsToTraces(this.props)}
       </>
     );
   }
 }
+
+const logsToTraces = (props: Props) => {
+  const { options, onOptionsChange } = props;
+  const setLogsToTraces = (uid?: string) =>
+    onOptionsChange({
+      ...options,
+      jsonData: {
+        ...options.jsonData,
+        logsToTraces: uid ? { datasourceUid: uid } : undefined,
+      },
+    });
+  return (
+    <FieldSet label="Logs to traces">
+      <Field
+        label="Trace data source"
+        description="Log entries containing a trace ID get a 'View trace' link that opens the selected Google Cloud Trace data source."
+        htmlFor="logs-to-traces-datasource"
+      >
+        <DataSourcePicker
+          inputId="logs-to-traces-datasource"
+          // The link query built in datasource.ts uses Cloud Trace's query
+          // shape, so only that datasource type can consume it.
+          filter={(ds) => ds.type === 'googlecloud-trace-datasource'}
+          noDefault={true}
+          width={40}
+          current={options.jsonData.logsToTraces?.datasourceUid ?? null}
+          onChange={(ds) => setLogsToTraces(ds.uid)}
+          onClear={() => setLogsToTraces()}
+        />
+      </Field>
+    </FieldSet>
+  );
+};
 
 const defaultProject = (props: Props) => {
   const { options, onOptionsChange } = props;
