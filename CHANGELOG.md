@@ -1,4 +1,9 @@
 # Changelog
+## 1.7.2 (2026-08-17)
+* Update dependencies to address security vulnerabilities flagged by the Grafana plugin review: js-yaml (CVE-2026-59869) and nanoid (CVE-2026-67213) in the frontend build toolchain
+* Upgrade the Grafana Go plugin SDK from v0.290.0 to v0.296.2
+* Build with Go 1.26.6 to pick up standard-library security fixes flagged by govulncheck
+
 ## 1.7.1 (2026-08-17)
 * Add **Get trace project from the query** option to the Logs to traces settings (`logsToTraces.projectIdFromQuery`). When enabled, "View trace" links use the project of the query that produced the log entry (falling back to the default project) instead of the project embedded in the entry's `trace` path — for setups where logs are routed through a central logging project that stamps its own ID into the trace path. The setting is preserved when the trace data source is changed or cleared
 * Fix "View trace" links under GCE authentication intermittently missing for entries whose `trace` label is not a canonical resource path: the auto-detected default project is now resolved whenever a trace data source is configured (concurrently with the query), shared across simultaneous queries, and no longer re-fetched before every query after a failed lookup

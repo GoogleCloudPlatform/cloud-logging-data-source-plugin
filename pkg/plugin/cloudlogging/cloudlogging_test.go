@@ -16,6 +16,7 @@ package cloudlogging_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"cloud.google.com/go/logging/apiv2/loggingpb"
@@ -445,7 +446,18 @@ func TestGetLogLabels(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expected, cloudlogging.GetLogLabels(tc.entry))
+			require.Equal(t, normalizeLabelSpaces(tc.expected), normalizeLabelSpaces(cloudlogging.GetLogLabels(tc.entry)))
 		})
 	}
+}
+
+// normalizeLabelSpaces collapses runs of whitespace in label values so
+// assertions don't depend on protobuf text-format output, which inserts
+// unstable whitespace by design.
+func normalizeLabelSpaces(labels data.Labels) data.Labels {
+	normalized := data.Labels{}
+	for k, v := range labels {
+		normalized[k] = strings.Join(strings.Fields(v), " ")
+	}
+	return normalized
 }
