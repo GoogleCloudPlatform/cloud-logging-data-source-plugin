@@ -19,7 +19,7 @@ import { ConnectionConfig, GoogleAuthType } from '@grafana/google-sdk';
 import { DataSourcePicker } from '@grafana/runtime';
 import { Checkbox, Field, FieldSet, Input, SecretInput, Select, TextArea } from '@grafana/ui';
 import React, { PureComponent } from 'react';
-import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData } from './types';
+import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData, LogsToTracesOptions } from './types';
 
 export type Props = DataSourcePluginOptionsEditorProps<CloudLoggingOptions, DataSourceSecureJsonData>;
 
@@ -171,12 +171,14 @@ export class ConfigEditor extends PureComponent<Props> {
 
 const logsToTraces = (props: Props) => {
   const { options, onOptionsChange } = props;
-  const setLogsToTraces = (uid?: string) =>
+  // Merge-style updater so changing one option (e.g. swapping the trace
+  // data source) never silently drops the others.
+  const setLogsToTraces = (patch: Partial<LogsToTracesOptions>) =>
     onOptionsChange({
       ...options,
       jsonData: {
         ...options.jsonData,
-        logsToTraces: uid ? { datasourceUid: uid } : undefined,
+        logsToTraces: { ...options.jsonData.logsToTraces, ...patch },
       },
     });
   return (
@@ -194,10 +196,23 @@ const logsToTraces = (props: Props) => {
           noDefault={true}
           width={40}
           current={options.jsonData.logsToTraces?.datasourceUid ?? null}
-          onChange={(ds) => setLogsToTraces(ds.uid)}
-          onClear={() => setLogsToTraces()}
+          onChange={(ds) => setLogsToTraces({ datasourceUid: ds.uid })}
+          onClear={() => setLogsToTraces({ datasourceUid: undefined })}
         />
       </Field>
+      {/* Options survive clearing the picker, so keep the row visible while
+          the flag is set — it must never become hidden, uneditable state. */}
+      {(options.jsonData.logsToTraces?.datasourceUid || options.jsonData.logsToTraces?.projectIdFromQuery) && (
+        <Checkbox
+          id="logs-to-traces-project-from-query"
+          label="Get trace project from the query"
+          description="Use the query's project ID (or the default project) for 'View trace' links instead of the project in the log entry's trace field. If neither resolves, the link is omitted. Enable this when logs are routed through a central logging project that stamps its own ID into the trace path."
+          value={options.jsonData.logsToTraces?.projectIdFromQuery ?? false}
+          onChange={(e) => setLogsToTraces({ projectIdFromQuery: e.currentTarget.checked })}
+          onPointerEnterCapture={undefined}
+          onPointerLeaveCapture={undefined}
+        />
+      )}
     </FieldSet>
   );
 };

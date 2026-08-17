@@ -253,9 +253,9 @@ describe('Google Cloud Logging Data Source', () => {
             ],
         });
 
-        const runQuery = async (ds: DataSource, frame: DataFrame) => {
+        const runQuery = async (ds: DataSource, frame: DataFrame, targets: Query[] = []) => {
             jest.spyOn(DataSourceWithBackend.prototype, 'query').mockReturnValue(of({ data: [frame] }));
-            return lastValueFrom(ds.query({ targets: [] } as unknown as Parameters<DataSource['query']>[0]));
+            return lastValueFrom(ds.query({ targets, scopedVars: {} } as unknown as Parameters<DataSource['query']>[0]));
         };
 
         afterEach(() => {
@@ -331,6 +331,104 @@ describe('Google Cloud Logging Data Source', () => {
             const frame = logFrame({ trace: 'abc123', traceId: 'abc123' });
             const response = await runQuery(ds, frame);
             expect(response.data[0].fields).toHaveLength(2);
+        });
+
+        it('keeps the trace-path project when targets carry a projectId and the flag is off', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
+            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123' });
+            const targets = [{ refId: 'A', projectId: 'other-proj' } as Query];
+            const response = await runQuery(ds, frame, targets);
+
+            const traceField = response.data[0].fields.find((f: { name: string }) => f.name === 'traceId');
+            expect(traceField.config.links[0].internal.query.projectId).toBe('my-proj');
+        });
+
+        it('warms the GCE default project for the trace-link fallback when the flag is off', async () => {
+            const ds = makeDataSource({
+                logsToTraces: { datasourceUid: 'trace-uid' },
+                authenticationType: GoogleAuthType.GCE,
+            });
+            const gceSpy = jest.spyOn(ds, 'getGCEDefaultProject').mockResolvedValue('gce-proj');
+            // The target carries a projectId, so the warm-up is not needed to
+            // build the request — only the non-canonical trace-path fallback
+            // consumes it when the response is mapped.
+            const frame = logFrame({ trace: 'abc123', traceId: 'abc123' });
+            const targets = [{ refId: 'A', projectId: 'some-proj' } as Query];
+            const response = await runQuery(ds, frame, targets);
+
+            expect(gceSpy).toHaveBeenCalled();
+            const traceField = response.data[0].fields.find((f: { name: string }) => f.name === 'traceId');
+            expect(traceField.config.links[0].internal.query.projectId).toBe('gce-proj');
+        });
+
+        describe('with projectIdFromQuery enabled', () => {
+            const stubTemplateSrv = {
+                replace: (s?: string) => (s === '$project' ? 'tenant-proj' : s ?? ''),
+            } as unknown as TemplateSrv;
+
+            const makeFlagOnDataSource = (overrides?: Partial<CloudLoggingOptions>) =>
+                makeDataSource(
+                    { logsToTraces: { datasourceUid: 'trace-uid', projectIdFromQuery: true }, ...overrides },
+                    stubTemplateSrv
+                );
+
+            const linkProject = (response: { data: any[] }) =>
+                response.data[0].fields.find((f: { name: string }) => f.name === 'traceId')?.config.links[0].internal
+                    .query.projectId;
+
+            const routedFrame = () =>
+                logFrame({ trace: 'projects/routing-proj/traces/abc123', traceId: 'abc123' });
+
+            it('uses the projectId of the target that produced the frame, not the trace path', async () => {
+                const ds = makeFlagOnDataSource();
+                const targets = [{ refId: 'A', projectId: 'tenant-proj' } as Query];
+                const response = await runQuery(ds, routedFrame(), targets);
+                expect(linkProject(response)).toBe('tenant-proj');
+            });
+
+            it('interpolates template variables in the target projectId', async () => {
+                const ds = makeFlagOnDataSource();
+                const targets = [{ refId: 'A', projectId: '$project' } as Query];
+                const response = await runQuery(ds, routedFrame(), targets);
+                expect(linkProject(response)).toBe('tenant-proj');
+            });
+
+            it('falls back to the default project when no target matches the frame', async () => {
+                const ds = makeFlagOnDataSource({ defaultProject: 'my-default-proj' });
+                const response = await runQuery(ds, routedFrame(), []);
+                expect(linkProject(response)).toBe('my-default-proj');
+            });
+
+            it('falls back to the default project when the matching target has no projectId', async () => {
+                const ds = makeFlagOnDataSource({ defaultProject: 'my-default-proj' });
+                const targets = [{ refId: 'A', projectId: '' } as Query];
+                const response = await runQuery(ds, routedFrame(), targets);
+                expect(linkProject(response)).toBe('my-default-proj');
+            });
+
+            it('ignores hidden targets when resolving the project', async () => {
+                const ds = makeFlagOnDataSource({ defaultProject: 'my-default-proj' });
+                const targets = [{ refId: 'A', projectId: 'tenant-proj', hide: true } as Query];
+                const response = await runQuery(ds, routedFrame(), targets);
+                expect(linkProject(response)).toBe('my-default-proj');
+            });
+
+            it('omits the link when neither a target project nor a default project resolves', async () => {
+                const ds = makeFlagOnDataSource();
+                const response = await runQuery(ds, routedFrame(), []);
+                expect(response.data[0].fields).toHaveLength(2);
+            });
+
+            it('pre-resolves the GCE default project so the link fallback works under GCE auth', async () => {
+                const ds = makeFlagOnDataSource({ authenticationType: GoogleAuthType.GCE });
+                const gceSpy = jest.spyOn(ds, 'getGCEDefaultProject').mockResolvedValue('gce-proj');
+                // All targets carry a projectId, but none matches the frame's
+                // refId, so the link must fall back to the GCE project.
+                const targets = [{ refId: 'B', projectId: 'other-proj' } as Query];
+                const response = await runQuery(ds, routedFrame(), targets);
+                expect(gceSpy).toHaveBeenCalled();
+                expect(linkProject(response)).toBe('gce-proj');
+            });
         });
     });
 

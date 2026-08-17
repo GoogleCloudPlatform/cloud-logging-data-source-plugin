@@ -109,11 +109,25 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     return this.getResource(`gceDefaultProject`);
   }
 
+  /**
+   * Resolve and cache the GCE default project. Single-flight: concurrent
+   * queries share one resource call, and a failed lookup is not retried
+   * until the next page load — retrying per query would gate every query
+   * on a full failing round-trip.
+   */
+  private gceDefaultProjectPromise: Promise<void> | null = null;
+
   async ensureGCEDefaultProject() {
     const { authenticationType, gceDefaultProject } = this.instanceSettings.jsonData;
-    if (authenticationType === 'gce' && !gceDefaultProject) {
-      this.instanceSettings.jsonData.gceDefaultProject = await this.getGCEDefaultProject();
+    if (authenticationType !== 'gce' || gceDefaultProject) {
+      return;
     }
+    if (!this.gceDefaultProjectPromise) {
+      this.gceDefaultProjectPromise = this.getGCEDefaultProject().then((project) => {
+        this.instanceSettings.jsonData.gceDefaultProject = project;
+      });
+    }
+    return this.gceDefaultProjectPromise;
   }
 
   /**
@@ -280,23 +294,48 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
    * @returns a modified {@link Observable<DataQueryResponse>}
    */
   query(request: DataQueryRequest<Query>): Observable<DataQueryResponse> {
-    // When a target has no projectId, applyTemplateVariables falls back to
-    // defaultProjectSync(), which for GCE auth reads a lazily-populated
-    // cache; resolve it before the backend call so the fallback is available.
-    const needsDefaultProject = request.targets.some((t) => !t.hide && !t.projectId);
-    const base =
-      needsDefaultProject && this.instanceSettings.jsonData.authenticationType === 'gce'
-        ? from(this.ensureGCEDefaultProject().catch(() => {})).pipe(mergeMap(() => super.query(request)))
-        : super.query(request);
     const uid = this.instanceSettings.jsonData.logsToTraces?.datasourceUid;
     const traceDs = uid ? getDataSourceSrv().getInstanceSettings(uid) : undefined;
+    // For GCE auth, defaultProjectSync() reads a lazily-populated cache.
+    // applyTemplateVariables falls back to it while the backend request is
+    // built, so when a target has no projectId the cache must resolve before
+    // super.query. The trace-link fallbacks read the same cache but only
+    // once the response is mapped, so for them the warm-up runs concurrently
+    // with the query and is awaited in the response pipe below.
+    const needsDefaultProjectForRequest = request.targets.some((t) => !t.hide && !t.projectId);
+    const gceWarmup =
+      this.instanceSettings.jsonData.authenticationType === 'gce' && (needsDefaultProjectForRequest || !!traceDs)
+        ? this.ensureGCEDefaultProject().catch(() => {})
+        : undefined;
+    const base =
+      gceWarmup && needsDefaultProjectForRequest
+        ? from(gceWarmup).pipe(mergeMap(() => super.query(request)))
+        : super.query(request);
     if (!traceDs) {
       return base;
     }
-    return base.pipe(
+    // With projectIdFromQuery enabled, trace links use the project of the
+    // query target that produced each frame (matched by refId) instead of
+    // the project embedded in the log entry's trace path.
+    const projectByRefId = this.instanceSettings.jsonData.logsToTraces?.projectIdFromQuery
+      ? new Map(
+          request.targets
+            .filter((t) => !t.hide && t.projectId)
+            .map((t) => [t.refId, this.templateSrv.replace(t.projectId, request.scopedVars)])
+        )
+      : undefined;
+    const awaited = gceWarmup ? base.pipe(mergeMap((response) => from(gceWarmup.then(() => response)))) : base;
+    return awaited.pipe(
       map((response) => ({
         ...response,
-        data: response.data.map((frame: DataFrame) => this.addTraceLinkField(frame, traceDs.uid, traceDs.name)),
+        data: response.data.map((frame: DataFrame) =>
+          this.addTraceLinkField(
+            frame,
+            traceDs.uid,
+            traceDs.name,
+            projectByRefId ? projectByRefId.get(frame.refId ?? '') || this.defaultProjectSync() : undefined
+          )
+        ),
       }))
     );
   }
@@ -308,8 +347,19 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
    * the trace ID as its own field carrying an internal data link, so the
    * log details panel renders a "View trace" link that opens the configured
    * tracing data source — the same mechanism as Loki's derived fields.
+   *
+   * `projectIdOverride` is defined when the projectIdFromQuery setting is
+   * on: it is used verbatim as the link's project and the trace path is
+   * never parsed — the entry may be stamped with a routing project the user
+   * explicitly opted out of. An empty override means nothing resolved, so
+   * the link is omitted.
    */
-  addTraceLinkField(frame: DataFrame, datasourceUid: string, datasourceName: string): DataFrame {
+  addTraceLinkField(
+    frame: DataFrame,
+    datasourceUid: string,
+    datasourceName: string,
+    projectIdOverride?: string
+  ): DataFrame {
     const contentField = frame.fields.find((f) => f.name === 'content');
     const labels = contentField?.labels;
     const traceId = labels?.['traceId'];
@@ -321,7 +371,9 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     // unset skip the link entirely — Cloud Trace errors on an empty project,
     // so no link beats a broken one.
     const projectId =
-      labels['trace']?.match(/^projects\/([^/]+)\/traces\//)?.[1] ?? this.defaultProjectSync();
+      projectIdOverride !== undefined
+        ? projectIdOverride
+        : labels['trace']?.match(/^projects\/([^/]+)\/traces\//)?.[1] ?? this.defaultProjectSync();
     if (!projectId) {
       return frame;
     }
