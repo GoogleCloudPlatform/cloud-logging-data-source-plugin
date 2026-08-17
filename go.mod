@@ -1,6 +1,6 @@
 module github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin
 
-go 1.26.5
+go 1.26.6
 
 require (
 	cloud.google.com/go/logging v1.13.0
