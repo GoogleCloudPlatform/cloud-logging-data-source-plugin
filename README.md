@@ -109,12 +109,17 @@ If a pattern contains invalid regex syntax, it is treated as a literal string ma
 
 You can link log entries to a [Google Cloud Trace](https://grafana.com/grafana/plugins/googlecloud-trace-datasource/) data source. In the data source settings, under **Logs to traces**, select the Google Cloud Trace data source. Once configured, any log entry written with the [LogEntry `trace` field](https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry) shows a `traceId` field with a **View trace** link in the log details — clicking it opens the trace in the selected data source. The link carries the project parsed from the entry's `projects/<project>/traces/<id>` path; if the `trace` value is not in that form, the data source's default project is used, and if no project can be determined the link is omitted.
 
+If your logs are routed through a central logging project (for example, an OpenTelemetry collector writes to one project and a [log sink](https://cloud.google.com/logging/docs/export/configure_export_v2) forwards entries to tenant projects), the `trace` path is stamped with the routing project's ID even though the trace lives in the tenant project, so the parsed project is wrong. Enable **Get trace project from the query** to make the link use the project of the query that produced the log entry instead (falling back to the data source's default project; if neither resolves, the link is omitted). Only the link target changes — the raw `trace` label in the log details still shows the original path.
+
 Provisioning example:
 
 ```yaml
 jsonData:
   logsToTraces:
     datasourceUid: my-cloud-trace-datasource-uid
+    # Optional: use the queried project for View trace links instead of the
+    # project in the log entry's trace path (for centrally routed logs)
+    # projectIdFromQuery: true
 ```
 
 > **Note: a "View trace" link is not a guarantee that the trace was recorded.** For services with automatic request tracing (Cloud Run, App Engine, GKE ingress, and other services behind Google's HTTP load balancing), every request log entry carries a trace ID, but Cloud Trace only stores traces for **sampled** requests — and the built-in sampling rate is low (roughly 0.1 traces per second per instance for Cloud Run). Clicking **View trace** for an unsampled request shows a "trace not found" result; this is expected and matches the behavior of the trace links in the Google Cloud console's Logs Explorer. To make more links resolve, increase sampling on the application side: instrument the service with [OpenTelemetry](https://cloud.google.com/trace/docs/setup) and configure your own sampling rate, or force sampling on individual requests by sending an `X-Cloud-Trace-Context: <trace-id>/<span-id>;o=1` header (or a W3C `traceparent` header with the sampled flag set). Note that Cloud Trace bills per ingested span, so consider cost before sampling at 100% on high-traffic services.

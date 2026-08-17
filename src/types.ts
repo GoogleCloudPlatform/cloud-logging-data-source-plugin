@@ -38,6 +38,13 @@ export const authTypes: Array<SelectableValue<string>> = [
  */
 export interface LogsToTracesOptions {
   datasourceUid?: string;
+  /**
+   * When true, "View trace" links ignore the project embedded in the log
+   * entry's `trace` path and use the queried project (falling back to the
+   * default project) instead. For setups where logs are routed through a
+   * central logging project that stamps its own ID into the trace path.
+   */
+  projectIdFromQuery?: boolean;
 }
 
 /**
