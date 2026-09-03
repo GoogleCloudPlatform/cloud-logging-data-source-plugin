@@ -110,7 +110,9 @@ export interface VariableScopeData {
   projects: SelectableValue[];
   buckets: SelectableValue[];
   bucketId: string;
-  viewId: string;
   projectId: string;
+  /** True while an option list for the current scope is being fetched. */
   loading: boolean;
+  /** Last option-loading failure, shown inline; cleared on the next user action. */
+  error?: string;
 }

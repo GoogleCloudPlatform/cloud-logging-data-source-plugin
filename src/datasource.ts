@@ -341,12 +341,18 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   }
 
   /**
-   * The backend emits one frame per log entry, with the entry's trace data
-   * attached as labels on the `content` field (`trace` holds the full
-   * `projects/<project>/traces/<id>` path, `traceId` the bare ID). Surface
-   * the trace ID as its own field carrying an internal data link, so the
-   * log details panel renders a "View trace" link that opens the configured
-   * tracing data source — the same mechanism as Loki's derived fields.
+   * The backend emits one dataplane log-lines frame per query. Each row has a
+   * nullable `traceId` field (the bare trace ID, null when the entry has no
+   * trace) and a `labels` object whose `trace` entry is the raw LogEntry value
+   * in the canonical `projects/<project>/traces/<id>` form. Attach an internal
+   * data link to `traceId` so the log details panel renders a "View trace"
+   * link that opens the configured tracing data source — the same mechanism
+   * as Loki's derived fields.
+   *
+   * The link's project can differ per row, and a data link is configured per
+   * field, so the per-row project is carried in a hidden `traceProject` field
+   * and interpolated into the link via `${__data.fields.traceProject}`; the
+   * trace ID itself is `${__value.raw}`.
    *
    * `projectIdOverride` is defined when the projectIdFromQuery setting is
    * on: it is used verbatim as the link's project and the trace path is
@@ -360,46 +366,67 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     datasourceName: string,
     projectIdOverride?: string
   ): DataFrame {
-    const contentField = frame.fields.find((f) => f.name === 'content');
-    const labels = contentField?.labels;
-    const traceId = labels?.['traceId'];
-    if (!contentField || !labels || !traceId || frame.fields.some((f) => f.name === 'traceId')) {
+    const traceField = frame.fields.find((f) => f.name === 'traceId');
+    if (!traceField || frame.fields.some((f) => f.name === 'traceProject')) {
       return frame;
     }
+    const traceIds = fieldValues<string | null>(traceField);
+    if (!traceIds.some((id) => !!id)) {
+      return frame;
+    }
+    const labelsField = frame.fields.find((f) => f.name === 'labels');
+    const labelRows = labelsField ? fieldValues<Record<string, string> | null | undefined>(labelsField) : [];
+
     // LogEntry.trace is a free-form string; when it isn't the canonical
     // resource path, fall back to the default project, and if that is also
-    // unset skip the link entirely — Cloud Trace errors on an empty project,
-    // so no link beats a broken one.
-    const projectId =
-      projectIdOverride !== undefined
-        ? projectIdOverride
-        : labels['trace']?.match(/^projects\/([^/]+)\/traces\//)?.[1] ?? this.defaultProjectSync();
-    if (!projectId) {
+    // unset skip the link for that row — Cloud Trace errors on an empty
+    // project, so no link beats a broken one.
+    const projects = traceIds.map((traceId, i) => {
+      if (!traceId) {
+        return null;
+      }
+      const projectId =
+        projectIdOverride !== undefined
+          ? projectIdOverride
+          : labelRows[i]?.['trace']?.match(/^projects\/([^/]+)\/traces\//)?.[1] ?? this.defaultProjectSync();
+      return projectId || null;
+    });
+    if (!projects.some((p) => !!p)) {
       return frame;
     }
-    // The linked field replaces the label in the log details view; leaving
-    // both would show `traceId` twice (once without the link).
-    delete labels['traceId'];
-    const rowCount = contentField.values.length;
-    frame.fields.push({
-      name: 'traceId',
-      type: FieldType.string,
-      config: {
-        links: [
-          {
-            title: 'View trace',
-            url: '',
-            internal: {
-              datasourceUid,
-              datasourceName,
-              query: { refId: 'trace', queryType: 'traceID', traceId, projectId },
+
+    // A data link applies to every non-null value of its field, so rows whose
+    // project could not be resolved get their trace ID nulled out rather
+    // than a broken link. The full trace path stays visible in `labels`.
+    traceField.values = projects.map((p, i) => (p ? traceIds[i] : null)) as unknown as typeof traceField.values;
+    traceField.config = {
+      ...(traceField.config ?? {}),
+      links: [
+        {
+          title: 'View trace',
+          url: '',
+          internal: {
+            datasourceUid,
+            datasourceName,
+            query: {
+              refId: 'trace',
+              queryType: 'traceID',
+              traceId: '${__value.raw}',
+              projectId: '${__data.fields.traceProject}',
             },
           },
-        ],
-      },
+        },
+      ],
+    };
+    frame.fields.push({
+      name: 'traceProject',
+      type: FieldType.string,
+      // `custom.hidden` is what Grafana's log details parser checks to keep a
+      // field out of the details view while leaving it available to links.
+      config: { custom: { hidden: true } },
       // Grafana >= 10 accepts plain arrays as field values at runtime; the
       // cast only satisfies the bundled @grafana/data 9.x typings (Vector<T>).
-      values: new Array(rowCount).fill(traceId),
+      values: projects,
     } as unknown as Field);
     return frame;
   }
@@ -430,14 +457,8 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
         if (action.options?.key && action.options?.value) {
           if (action.options?.key === "id") {
             queryText += `\ninsertId="${escapeLabelValue(action.options.value)}"`;
-          } else if (action.options?.key === "level") {
-            let level = action.options.value;
-            if (level === "debug") {
-              level = "DEFAULT";
-            } else if (level === "critical") {
-              level = "EMERGENCY";
-            }
-            queryText += `\nseverity="${escapeLabelValue(level)}"`;
+          } else if (action.options?.key === "level" || action.options?.key === "severity") {
+            queryText += `\nseverity="${escapeLabelValue(toCloudLoggingSeverity(action.options.value))}"`;
           } else {
             queryText += `\n${action.options.key}="${escapeLabelValue(action.options.value)}"`;
           }
@@ -448,14 +469,8 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
         if (action.options?.key && action.options?.value) {
           if (action.options?.key === "id") {
             queryText += `\ninsertId!="${escapeLabelValue(action.options.value)}"`;
-          } else if (action.options?.key === "level") {
-            let level = action.options.value;
-            if (level === "debug") {
-              level = "DEFAULT";
-            } else if (level === "critical") {
-              level = "EMERGENCY";
-            }
-            queryText += `\nseverity!="${escapeLabelValue(level)}"`;
+          } else if (action.options?.key === "level" || action.options?.key === "severity") {
+            queryText += `\nseverity!="${escapeLabelValue(toCloudLoggingSeverity(action.options.value))}"`;
           } else {
             queryText += `\n${action.options.key}!="${escapeLabelValue(action.options.value)}"`;
           }
@@ -477,4 +492,31 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
 // - "  ... the double-quote character
 function escapeLabelValue(labelValue: string): string {
   return labelValue.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
+}
+
+/**
+ * Field values as a plain array. Grafana >= 10 hands us plain arrays; the
+ * bundled @grafana/data 9.x typings (and tests) still model them as Vector<T>.
+ */
+function fieldValues<T>(field: Field): T[] {
+  const v = field.values as unknown;
+  if (Array.isArray(v)) {
+    return v as T[];
+  }
+  const vec = v as { toArray?: () => T[] };
+  return typeof vec?.toArray === 'function' ? vec.toArray() : Array.from(v as Iterable<T>);
+}
+
+/**
+ * Maps a Grafana log level (as shown in the logs panel) back to the Cloud
+ * Logging severity it was derived from. Grafana has no DEFAULT or EMERGENCY.
+ */
+function toCloudLoggingSeverity(level: string): string {
+  if (level === 'debug') {
+    return 'DEFAULT';
+  }
+  if (level === 'critical') {
+    return 'EMERGENCY';
+  }
+  return level;
 }

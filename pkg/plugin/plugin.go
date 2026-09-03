@@ -43,7 +43,6 @@ var (
 )
 
 const (
-	privateKeyKey                  = "privateKey"
 	gceAuthentication              = "gce"
 	jwtAuthentication              = "jwt"
 	accessTokenAuthentication      = "accessToken"
@@ -97,16 +96,23 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		conf.AuthType = jwtAuthentication
 	}
 
+	// Read the private key the same way the other Google data sources do
+	// (grafana-google-sdk-go): from `privateKeyPath` if set, else from the
+	// `privateKey` secret, with literal `\n` sequences turned into newlines.
+	// Provisioned keys (YAML, Terraform, env vars) often arrive with the
+	// escapes intact, which the credentials parser rejects (#76, #202).
+	privateKey, err := utils.GetPrivateKey(&settings)
+	if err != nil {
+		return nil, fmt.Errorf("read private key: %s", sanitizeErrorMessage(err))
+	}
+
 	// Only auto-switch to accessToken if the auth type is jwt (the default) and
 	// no JWT private key was provided. This preserves backward compat for
 	// pre-dropdown users (v1.5.0) who only set an access token, without hijacking
 	// explicitly-chosen auth types like GCE or OAuth.
-	if conf.AuthType == jwtAuthentication {
+	if conf.AuthType == jwtAuthentication && privateKey == "" {
 		if accessToken, ok := settings.DecryptedSecureJSONData[accessTokenKey]; ok && accessToken != "" {
-			privateKey, hasKey := settings.DecryptedSecureJSONData[privateKeyKey]
-			if !hasKey || privateKey == "" {
-				conf.AuthType = accessTokenAuthentication
-			}
+			conf.AuthType = accessTokenAuthentication
 		}
 	}
 
@@ -117,8 +123,7 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 
 	switch conf.AuthType {
 	case jwtAuthentication:
-		privateKey, ok := settings.DecryptedSecureJSONData[privateKeyKey]
-		if !ok || privateKey == "" {
+		if privateKey == "" {
 			return nil, errMissingCredentials
 		}
 
@@ -151,7 +156,11 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 	}
 
 	if client_err != nil {
-		return nil, fmt.Errorf("create client: %s", sanitizeErrorMessage(client_err))
+		msg := sanitizeErrorMessage(client_err)
+		if conf.AuthType == jwtAuthentication && strings.Contains(msg, "parse key") {
+			msg += " (the privateKey must be the complete PEM block from the service account JSON file, including its line breaks)"
+		}
+		return nil, fmt.Errorf("create client: %s", msg)
 	}
 
 	return &CloudLoggingDatasource{
@@ -434,32 +443,73 @@ func (d *CloudLoggingDatasource) query(ctx context.Context, pCtx backend.PluginC
 		return response
 	}
 
-	// create data frame response.
-	frames := []*data.Frame{}
+	// Build a single dataplane "log-lines" frame with one row per entry
+	// (https://grafana.com/developers/dataplane/logs). Grafana identifies a
+	// log row by refId + the `id` field; the previous one-frame-per-entry
+	// layout left every row at index 0 of its own frame with no id, so all
+	// rows shared one uid and log details, permalinks and the Logs Table
+	// misbehaved (issue #221).
+	n := len(logs)
+	timestamps := make([]time.Time, 0, n)
+	bodies := make([]string, 0, n)
+	severities := make([]string, 0, n)
+	ids := make([]string, 0, n)
+	labels := make([]json.RawMessage, 0, n)
+	traceIDs := make([]*string, 0, n)
 
-	for i := 0; i < len(logs); i++ {
-		body, err := cloudlogging.GetLogEntryMessage(logs[i])
+	for i, entry := range logs {
+		body, err := cloudlogging.GetLogEntryMessage(entry)
 		if err != nil {
 			// some log messages might not have a payload
 			// log a warning here but continue
 			log.DefaultLogger.Warn("failed getting log message", "warning", err)
 		}
 
-		labels := cloudlogging.GetLogLabels(logs[i])
-		f := data.NewFrame(logs[i].GetInsertId())
-		timestamp := data.NewField("time", nil, []time.Time{logs[i].GetTimestamp().AsTime()})
-		content := data.NewField("content", labels, []string{body})
+		// The API always assigns an insert ID, but never let an empty one
+		// through: rows with equal ids collapse into one in Grafana.
+		id := entry.GetInsertId()
+		if id == "" {
+			id = fmt.Sprintf("%s_%d", query.RefID, i)
+		}
 
-		f.Fields = append(f.Fields, timestamp, content)
-		f.Meta = &data.FrameMeta{}
-		f.Meta.PreferredVisualization = data.VisTypeLogs
-		frames = append(frames, f)
+		entryLabels, err := json.Marshal(cloudlogging.GetLogLabels(entry))
+		if err != nil {
+			log.DefaultLogger.Warn("failed encoding log labels", "warning", err)
+			entryLabels = json.RawMessage("{}")
+		}
+
+		var traceID *string
+		if t := cloudlogging.GetTraceID(entry); t != "" {
+			traceID = &t
+		}
+
+		timestamps = append(timestamps, entry.GetTimestamp().AsTime())
+		bodies = append(bodies, body)
+		severities = append(severities, cloudlogging.GetLogLevel(entry.GetSeverity()))
+		ids = append(ids, id)
+		labels = append(labels, entryLabels)
+		traceIDs = append(traceIDs, traceID)
 	}
 
-	// add the frames to the response.
-	for _, f := range frames {
-		response.Frames = append(response.Frames, f)
+	// Field order matters for Grafana's legacy logs parser, which falls back
+	// to the first time field and first string field.
+	frame := data.NewFrame(query.RefID,
+		data.NewField("timestamp", nil, timestamps),
+		data.NewField("body", nil, bodies),
+		data.NewField("severity", nil, severities),
+		data.NewField("id", nil, ids),
+		data.NewField("labels", nil, labels),
+		// Bare trace ID, nil when the entry has no trace. The frontend
+		// attaches the "View trace" data link to this field.
+		data.NewField("traceId", nil, traceIDs),
+	)
+	frame.RefID = query.RefID
+	frame.Meta = &data.FrameMeta{
+		Type:                   data.FrameTypeLogLines,
+		TypeVersion:            data.FrameTypeVersion{0, 0},
+		PreferredVisualization: data.VisTypeLogs,
 	}
+	response.Frames = append(response.Frames, frame)
 
 	return response
 }

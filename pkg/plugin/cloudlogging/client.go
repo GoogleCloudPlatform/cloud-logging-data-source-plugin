@@ -203,11 +203,21 @@ type Query struct {
 }
 
 // String is the query formatted for querying GCP
-// It is the query text, with the time range constraints appended
+// It is the query text, with the time range constraints appended.
+//
+// No parentheses are needed around the user's filter: in the Logging query
+// language OR binds tighter than AND, so `a OR b AND timestamp >= x` already
+// groups as `(a OR b) AND timestamp >= x`.
+//
+// An empty filter yields just the time range; a leading `AND` is rejected by
+// the API as an unparseable filter.
 func (q *Query) String() string {
-	return fmt.Sprintf(`%s AND timestamp >= "%s" AND timestamp <= "%s"`,
-		q.Filter, q.TimeRange.From, q.TimeRange.To,
-	)
+	timeRange := fmt.Sprintf(`timestamp >= "%s" AND timestamp <= "%s"`, q.TimeRange.From, q.TimeRange.To)
+	filter := strings.TrimSpace(q.Filter)
+	if filter == "" {
+		return timeRange
+	}
+	return filter + " AND " + timeRange
 }
 
 // ListProjects returns the project IDs of all visible projects.

@@ -253,10 +253,7 @@ func TestGetLogLabels(t *testing.T) {
 			entry: &loggingpb.LogEntry{
 				InsertId: "insert-id",
 			},
-			expected: data.Labels{
-				"id":    "insert-id",
-				"level": "info",
-			},
+			expected: data.Labels{},
 		},
 		{
 			name: "no log labels, but resource with labels",
@@ -270,10 +267,8 @@ func TestGetLogLabels(t *testing.T) {
 				},
 			},
 			expected: data.Labels{
-				"id":                          "insert-id",
 				"resource.labels.instance_id": "123456",
 				"resource.type":               "gce_instance",
-				"level":                       "info",
 			},
 		},
 		{
@@ -292,12 +287,10 @@ func TestGetLogLabels(t *testing.T) {
 				},
 			},
 			expected: data.Labels{
-				"id":                          "insert-id2",
 				"labels.\"pid\"":              "111",
 				"labels.\"LOG_BUCKET_NUM\"":   "1",
 				"resource.labels.instance_id": "98765",
 				"resource.type":               "cloudsql_database",
-				"level":                       "info",
 			},
 		},
 		{
@@ -335,7 +328,6 @@ func TestGetLogLabels(t *testing.T) {
 				},
 			},
 			expected: data.Labels{
-				"id": "insert-id4",
 				"labels.\"logging.googleapis.com/instrumentation_source\"": "agent.googleapis.com/thirdparty",
 				"jsonPayload.tid":                     "222",
 				"jsonPayload.db":                      "database-experiencing-error",
@@ -343,7 +335,6 @@ func TestGetLogLabels(t *testing.T) {
 				"labels.\"LOG_BUCKET_NUM\"":           "1",
 				"resource.labels.instance_id":         "98765",
 				"resource.type":                       "gce_instance",
-				"level":                               "alert",
 				"jsonPayload.service_context.service": "some-service",
 				"jsonPayload.service_context.version": "v42",
 			},
@@ -357,8 +348,6 @@ func TestGetLogLabels(t *testing.T) {
 				},
 			},
 			expected: data.Labels{
-				"id":          "insert-id5",
-				"level":       "info",
 				"textPayload": "This is a text log message",
 			},
 		},
@@ -370,11 +359,8 @@ func TestGetLogLabels(t *testing.T) {
 				SpanId:   "000000000000004a",
 			},
 			expected: data.Labels{
-				"id":      "insert-id6",
-				"level":   "info",
-				"trace":   "projects/my-project/traces/06796866738c859f2f19b7cfb3214824",
-				"traceId": "06796866738c859f2f19b7cfb3214824",
-				"spanId":  "000000000000004a",
+				"trace":  "projects/my-project/traces/06796866738c859f2f19b7cfb3214824",
+				"spanId": "000000000000004a",
 			},
 		},
 		{
@@ -401,8 +387,6 @@ func TestGetLogLabels(t *testing.T) {
 				},
 			},
 			expected: data.Labels{
-				"id":                       "insert-id7",
-				"level":                    "info",
 				"jsonPayload.string_field": "test",
 				"jsonPayload.number_field": "42.5",
 				"jsonPayload.bool_field":   "false",
@@ -421,10 +405,7 @@ func TestGetLogLabels(t *testing.T) {
 					},
 				},
 			},
-			expected: data.Labels{
-				"id":    "insert-id8",
-				"level": "info",
-			},
+			expected: data.Labels{},
 		},
 		{
 			name: "Proto payload with RequestLog",
@@ -437,16 +418,30 @@ func TestGetLogLabels(t *testing.T) {
 					},
 				},
 			},
-			expected: data.Labels{
-				"id":    "insert-id9",
-				"level": "info",
-			},
+			expected: data.Labels{},
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			require.Equal(t, normalizeLabelSpaces(tc.expected), normalizeLabelSpaces(cloudlogging.GetLogLabels(tc.entry)))
+		})
+	}
+}
+
+func TestGetTraceID(t *testing.T) {
+	testCases := []struct {
+		name     string
+		trace    string
+		expected string
+	}{
+		{name: "canonical resource path", trace: "projects/my-project/traces/06796866738c859f2f19b7cfb3214824", expected: "06796866738c859f2f19b7cfb3214824"},
+		{name: "bare id", trace: "06796866738c859f2f19b7cfb3214824", expected: "06796866738c859f2f19b7cfb3214824"},
+		{name: "no trace", trace: "", expected: ""},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, cloudlogging.GetTraceID(&loggingpb.LogEntry{Trace: tc.trace}))
 		})
 	}
 }
@@ -460,4 +455,31 @@ func normalizeLabelSpaces(labels data.Labels) data.Labels {
 		normalized[k] = strings.Join(strings.Fields(v), " ")
 	}
 	return normalized
+}
+
+func TestQueryString(t *testing.T) {
+	timeRange := struct {
+		From string
+		To   string
+	}{From: "2026-01-01T00:00:00Z", To: "2026-01-02T00:00:00Z"}
+	suffix := `timestamp >= "2026-01-01T00:00:00Z" AND timestamp <= "2026-01-02T00:00:00Z"`
+
+	testCases := []struct {
+		name     string
+		filter   string
+		expected string
+	}{
+		{name: "simple filter", filter: `severity >= DEFAULT`, expected: `severity >= DEFAULT AND ` + suffix},
+		{name: "top-level OR is left as is (OR binds tighter than AND)", filter: `a="1" OR b="2"`, expected: `a="1" OR b="2" AND ` + suffix},
+		{name: "multi-line filter keeps inner newlines", filter: "a=\"1\"\nb=\"2\"", expected: "a=\"1\"\nb=\"2\" AND " + suffix},
+		{name: "surrounding whitespace is trimmed", filter: "  severity >= DEFAULT \n", expected: `severity >= DEFAULT AND ` + suffix},
+		{name: "empty filter yields only the time range", filter: "", expected: suffix},
+		{name: "whitespace-only filter yields only the time range", filter: " \n\t", expected: suffix},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &cloudlogging.Query{Filter: tc.filter, TimeRange: timeRange}
+			require.Equal(t, tc.expected, q.String())
+		})
+	}
 }
