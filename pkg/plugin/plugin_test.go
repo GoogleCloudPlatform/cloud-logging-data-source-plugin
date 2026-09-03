@@ -183,16 +183,159 @@ func TestQueryData_SingleLog(t *testing.T) {
 	require.Len(t, resp.Responses[refID].Frames, 1)
 
 	frame := resp.Responses[refID].Frames[0]
-	require.Equal(t, insertID, frame.Name)
-	require.Len(t, frame.Fields, 2)
-	require.Equal(t, data.VisTypeLogs, string(frame.Meta.PreferredVisualization))
+	requireLogLinesFrame(t, frame, refID)
+	require.Equal(t, 1, frame.Rows())
+	require.Equal(t, time.UnixMilli(1660920349373).UTC(), frame.Fields[0].At(0).(time.Time).UTC())
+	require.Equal(t, "Full log message from this GCE instance", frame.Fields[1].At(0))
+	require.Equal(t, "info", frame.Fields[2].At(0))
+	require.Equal(t, insertID, frame.Fields[3].At(0))
+	require.JSONEq(t, `{
+		"labels.\"custom_label\"": "custom_value",
+		"labels.\"instance_id\"": "unique",
+		"resource.type": "gce_instance",
+		"textPayload": "Full log message from this GCE instance",
+		"trace": "projects/xxx/traces/c0e331eab1515bbcd1b8306029902ff7"
+	}`, string(frame.Fields[4].At(0).(json.RawMessage)))
+	require.Equal(t, "c0e331eab1515bbcd1b8306029902ff7", *frame.Fields[5].At(0).(*string))
 
-	expectedFrame := []byte(`{"schema":{"name":"b6f39be2-b298-44da-9001-1f04e5756fa0","meta":{"typeVersion":[0,0],"preferredVisualisationType":"logs"},"fields":[{"name":"time","type":"time","typeInfo":{"frame":"time.Time"}},{"name":"content","type":"string","typeInfo":{"frame":"string"},"labels":{"id":"b6f39be2-b298-44da-9001-1f04e5756fa0","labels.\"custom_label\"":"custom_value","labels.\"instance_id\"":"unique","level":"info","resource.type":"gce_instance","textPayload":"Full log message from this GCE instance","trace":"projects/xxx/traces/c0e331eab1515bbcd1b8306029902ff7","traceId":"c0e331eab1515bbcd1b8306029902ff7"}}]},"data":{"values":[[1660920349373],["Full log message from this GCE instance"]]}}`)
-
-	serializedFrame, err := frame.MarshalJSON()
+	// The wire format must advertise the dataplane log-lines type so Grafana
+	// picks the dataplane parser rather than the legacy one.
+	serialized, err := frame.MarshalJSON()
 	require.NoError(t, err)
-	require.Equal(t, string(expectedFrame), string(serializedFrame))
+	var wire struct {
+		Schema struct {
+			Name  string `json:"name"`
+			RefID string `json:"refId"`
+			Meta  struct {
+				Type                   string `json:"type"`
+				TypeVersion            []int  `json:"typeVersion"`
+				PreferredVisualization string `json:"preferredVisualisationType"`
+			} `json:"meta"`
+			Fields []struct {
+				Name string `json:"name"`
+				Type string `json:"type"`
+			} `json:"fields"`
+		} `json:"schema"`
+	}
+	require.NoError(t, json.Unmarshal(serialized, &wire))
+	require.Equal(t, refID, wire.Schema.Name)
+	require.Equal(t, refID, wire.Schema.RefID)
+	require.Equal(t, "log-lines", wire.Schema.Meta.Type)
+	require.Equal(t, []int{0, 0}, wire.Schema.Meta.TypeVersion)
+	require.Equal(t, "logs", wire.Schema.Meta.PreferredVisualization)
+	var names, types []string
+	for _, f := range wire.Schema.Fields {
+		names = append(names, f.Name)
+		types = append(types, f.Type)
+	}
+	require.Equal(t, []string{"timestamp", "body", "severity", "id", "labels", "traceId"}, names)
+	require.Equal(t, []string{"time", "string", "string", "string", "other", "string"}, types)
 	client.AssertExpectations(t)
+}
+
+// requireLogLinesFrame asserts the frame-level invariants of the dataplane
+// logs contract: one frame per query, named and tagged with the refId.
+func requireLogLinesFrame(t *testing.T, frame *data.Frame, refID string) {
+	t.Helper()
+	require.Equal(t, refID, frame.Name)
+	require.Equal(t, refID, frame.RefID)
+	require.Equal(t, data.FrameTypeLogLines, frame.Meta.Type)
+	require.Equal(t, data.FrameTypeVersion{0, 0}, frame.Meta.TypeVersion)
+	require.Equal(t, data.VisTypeLogs, string(frame.Meta.PreferredVisualization))
+	require.Len(t, frame.Fields, 6)
+	for i, name := range []string{"timestamp", "body", "severity", "id", "labels", "traceId"} {
+		require.Equal(t, name, frame.Fields[i].Name)
+	}
+}
+
+// queryLogs runs a single query against a mocked client returning the given
+// entries and returns the frames of the response.
+func queryLogs(t *testing.T, entries []*loggingpb.LogEntry) (string, data.Frames) {
+	t.Helper()
+	to := time.Now()
+	from := to.Add(-1 * time.Hour)
+	client := mocks.NewAPI(t)
+	client.On("ListLogs", mock.Anything, mock.Anything).Return(entries, nil)
+	client.On("Close").Return(nil)
+
+	ds := CloudLoggingDatasource{client: client}
+	refID := "logs"
+	resp, err := ds.QueryData(context.Background(), &backend.QueryDataRequest{
+		Queries: []backend.DataQuery{
+			{
+				JSON:          []byte(`{"projectId": "testing", "queryText": "resource.type = \"testing\""}`),
+				RefID:         refID,
+				TimeRange:     backend.TimeRange{From: from, To: to},
+				MaxDataPoints: 20,
+			},
+		},
+	})
+	ds.Dispose()
+	require.NoError(t, err)
+	require.NoError(t, resp.Responses[refID].Error)
+	return refID, resp.Responses[refID].Frames
+}
+
+func TestQueryData_MultipleLogs(t *testing.T) {
+	base := time.UnixMilli(1660920349373)
+	entries := []*loggingpb.LogEntry{
+		{
+			InsertId:  "insert-1",
+			Timestamp: timestamppb.New(base),
+			Severity:  ltype.LogSeverity_ERROR,
+			Trace:     "projects/proj-a/traces/aaaa",
+			Payload:   &loggingpb.LogEntry_TextPayload{TextPayload: "first"},
+		},
+		{
+			InsertId:  "insert-2",
+			Timestamp: timestamppb.New(base.Add(-time.Second)),
+			Severity:  ltype.LogSeverity_DEFAULT,
+			Payload:   &loggingpb.LogEntry_TextPayload{TextPayload: "second"},
+		},
+		{
+			// No insert ID and no payload: must still yield a row with a
+			// unique id rather than being dropped or colliding.
+			Timestamp: timestamppb.New(base.Add(-2 * time.Second)),
+			Severity:  ltype.LogSeverity_EMERGENCY,
+		},
+	}
+
+	refID, frames := queryLogs(t, entries)
+	require.Len(t, frames, 1, "all entries must land in a single frame")
+	frame := frames[0]
+	requireLogLinesFrame(t, frame, refID)
+	require.Equal(t, 3, frame.Rows())
+
+	var bodies, severities, ids []string
+	var traceIDs []*string
+	for i := 0; i < frame.Rows(); i++ {
+		bodies = append(bodies, frame.Fields[1].At(i).(string))
+		severities = append(severities, frame.Fields[2].At(i).(string))
+		ids = append(ids, frame.Fields[3].At(i).(string))
+		traceIDs = append(traceIDs, frame.Fields[5].At(i).(*string))
+	}
+	require.Equal(t, []string{"first", "second", ""}, bodies)
+	require.Equal(t, []string{"error", "info", "critical"}, severities)
+	require.Equal(t, []string{"insert-1", "insert-2", "logs_2"}, ids)
+	require.NotNil(t, traceIDs[0])
+	require.Equal(t, "aaaa", *traceIDs[0])
+	require.Nil(t, traceIDs[1])
+	require.Nil(t, traceIDs[2])
+
+	// Order is preserved and timestamps are per row.
+	require.Equal(t, base.UTC(), frame.Fields[0].At(0).(time.Time).UTC())
+	require.Equal(t, base.Add(-2*time.Second).UTC(), frame.Fields[0].At(2).(time.Time).UTC())
+
+	// Labels are per row and no longer duplicate the id/severity/traceId fields.
+	require.JSONEq(t, `{"trace": "projects/proj-a/traces/aaaa", "textPayload": "first"}`, string(frame.Fields[4].At(0).(json.RawMessage)))
+	require.JSONEq(t, `{}`, string(frame.Fields[4].At(2).(json.RawMessage)))
+}
+
+func TestQueryData_EmptyLogs(t *testing.T) {
+	refID, frames := queryLogs(t, []*loggingpb.LogEntry{})
+	require.Len(t, frames, 1, "an empty result still returns one frame so Grafana sees the schema")
+	requireLogLinesFrame(t, frames[0], refID)
+	require.Equal(t, 0, frames[0].Rows())
 }
 
 func TestNewCloudLoggingDatasource_OAuthPassthrough(t *testing.T) {

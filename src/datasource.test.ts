@@ -243,15 +243,37 @@ describe('Google Cloud Logging Data Source', () => {
     });
 
     describe('logs to traces data links', () => {
-        const logFrame = (labels?: Labels): DataFrame => ({
-            name: 'insert-id-1',
+        type Row = { traceId?: string | null; labels?: Labels };
+        const BASE_FIELDS = 6;
+
+        // Mirrors the backend's dataplane log-lines frame: one frame per
+        // query, one row per entry, nullable traceId, per-row labels.
+        const logFrame = (rows: Row[]): DataFrame => ({
+            name: 'A',
             refId: 'A',
-            length: 1,
+            length: rows.length,
             fields: [
-                { name: 'time', type: FieldType.time, config: {}, values: new ArrayVector([1700000000000]) },
-                { name: 'content', type: FieldType.string, config: {}, labels, values: new ArrayVector(['hello']) },
+                { name: 'timestamp', type: FieldType.time, config: {}, values: new ArrayVector(rows.map((_, i) => 1700000000000 + i)) },
+                { name: 'body', type: FieldType.string, config: {}, values: new ArrayVector(rows.map((_, i) => `line ${i}`)) },
+                { name: 'severity', type: FieldType.string, config: {}, values: new ArrayVector(rows.map(() => 'info')) },
+                { name: 'id', type: FieldType.string, config: {}, values: new ArrayVector(rows.map((_, i) => `insert-id-${i}`)) },
+                { name: 'labels', type: FieldType.other, config: {}, values: new ArrayVector(rows.map((r) => r.labels ?? {})) },
+                { name: 'traceId', type: FieldType.string, config: {}, values: new ArrayVector(rows.map((r) => r.traceId ?? null)) },
             ],
         });
+        const tracedRow = (project = 'my-proj', traceId = 'abc123'): Row => ({
+            traceId,
+            labels: { trace: `projects/${project}/traces/${traceId}`, spanId: 'def' },
+        });
+
+        const field = (response: { data: any[] }, name: string) =>
+            response.data[0].fields.find((f: { name: string }) => f.name === name);
+        const values = (f: any): unknown[] => (typeof f.values.toArray === 'function' ? f.values.toArray() : Array.from(f.values));
+        const linkProjects = (response: { data: any[] }) => values(field(response, 'traceProject'));
+        const expectUntouched = (response: { data: any[] }) => {
+            expect(response.data[0].fields).toHaveLength(BASE_FIELDS);
+            expect(field(response, 'traceId').config.links).toBeUndefined();
+        };
 
         const runQuery = async (ds: DataSource, frame: DataFrame, targets: Query[] = []) => {
             jest.spyOn(DataSourceWithBackend.prototype, 'query').mockReturnValue(of({ data: [frame] }));
@@ -262,14 +284,12 @@ describe('Google Cloud Logging Data Source', () => {
             jest.restoreAllMocks();
         });
 
-        it('appends a traceId field with an internal link when configured', async () => {
+        it('attaches an internal link to traceId and a hidden per-row traceProject field', async () => {
             const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
-            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123', spanId: 'def' });
-            const response = await runQuery(ds, frame);
+            const response = await runQuery(ds, logFrame([tracedRow()]));
 
-            const traceField = response.data[0].fields.find((f: { name: string }) => f.name === 'traceId');
-            expect(traceField).toBeDefined();
-            expect(Array.from(traceField.values)).toEqual(['abc123']);
+            const traceField = field(response, 'traceId');
+            expect(values(traceField)).toEqual(['abc123']);
             expect(traceField.config.links).toEqual([
                 {
                     title: 'View trace',
@@ -277,41 +297,56 @@ describe('Google Cloud Logging Data Source', () => {
                     internal: {
                         datasourceUid: 'trace-uid',
                         datasourceName: 'Google Cloud Trace',
-                        query: { refId: 'trace', queryType: 'traceID', traceId: 'abc123', projectId: 'my-proj' },
+                        query: {
+                            refId: 'trace',
+                            queryType: 'traceID',
+                            traceId: '${__value.raw}',
+                            projectId: '${__data.fields.traceProject}',
+                        },
                     },
                 },
             ]);
+            const projectField = field(response, 'traceProject');
+            expect(projectField.type).toBe(FieldType.string);
+            expect(projectField.config.custom.hidden).toBe(true);
+            expect(values(projectField)).toEqual(['my-proj']);
+        });
+
+        it('resolves the project from each row\'s own trace path', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
+            const response = await runQuery(ds, logFrame([tracedRow('proj-a', 't1'), tracedRow('proj-b', 't2')]));
+            expect(values(field(response, 'traceId'))).toEqual(['t1', 't2']);
+            expect(linkProjects(response)).toEqual(['proj-a', 'proj-b']);
+        });
+
+        it('leaves rows without a trace unlinked while linking the others', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
+            const response = await runQuery(ds, logFrame([tracedRow(), { labels: { level: 'info' } }]));
+            expect(values(field(response, 'traceId'))).toEqual(['abc123', null]);
+            expect(linkProjects(response)).toEqual(['my-proj', null]);
         });
 
         it('leaves frames untouched when logsToTraces is not configured', async () => {
             const ds = makeDataSource();
-            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123' });
-            const response = await runQuery(ds, frame);
-            expect(response.data[0].fields).toHaveLength(2);
+            expectUntouched(await runQuery(ds, logFrame([tracedRow()])));
         });
 
         it('leaves frames untouched when the configured datasource does not resolve', async () => {
             const ds = makeDataSource({ logsToTraces: { datasourceUid: 'gone' } });
-            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123' });
-            const response = await runQuery(ds, frame);
-            expect(response.data[0].fields).toHaveLength(2);
+            expectUntouched(await runQuery(ds, logFrame([tracedRow()])));
         });
 
-        it('leaves frames without a traceId label untouched', async () => {
+        it('leaves frames untouched when no row carries a trace', async () => {
             const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
-            const frame = logFrame({ level: 'info' });
-            const response = await runQuery(ds, frame);
-            expect(response.data[0].fields).toHaveLength(2);
+            expectUntouched(await runQuery(ds, logFrame([{ labels: { level: 'info' } }, {}])));
         });
 
-        it('removes the traceId label from the content field once the linked field is added', async () => {
+        it('leaves frames without a traceId field untouched', async () => {
             const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
-            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123' });
+            const frame = logFrame([tracedRow()]);
+            frame.fields = frame.fields.filter((f) => f.name !== 'traceId');
             const response = await runQuery(ds, frame);
-
-            const contentField = response.data[0].fields.find((f: { name: string }) => f.name === 'content');
-            expect(contentField.labels).toEqual({ trace: 'projects/my-proj/traces/abc123' });
-            expect(response.data[0].fields.find((f: { name: string }) => f.name === 'traceId')).toBeDefined();
+            expect(response.data[0].fields).toHaveLength(BASE_FIELDS - 1);
         });
 
         it('falls back to the default project when the trace label is not a resource path', async () => {
@@ -319,28 +354,27 @@ describe('Google Cloud Logging Data Source', () => {
                 logsToTraces: { datasourceUid: 'trace-uid' },
                 defaultProject: 'my-default-proj',
             });
-            const frame = logFrame({ trace: 'abc123', traceId: 'abc123' });
-            const response = await runQuery(ds, frame);
-
-            const traceField = response.data[0].fields.find((f: { name: string }) => f.name === 'traceId');
-            expect(traceField.config.links[0].internal.query.projectId).toBe('my-default-proj');
+            const response = await runQuery(ds, logFrame([{ traceId: 'abc123', labels: { trace: 'abc123' } }]));
+            expect(linkProjects(response)).toEqual(['my-default-proj']);
         });
 
-        it('skips the link when no project can be determined', async () => {
+        it('skips the link when no project can be determined for any row', async () => {
             const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
-            const frame = logFrame({ trace: 'abc123', traceId: 'abc123' });
-            const response = await runQuery(ds, frame);
-            expect(response.data[0].fields).toHaveLength(2);
+            expectUntouched(await runQuery(ds, logFrame([{ traceId: 'abc123', labels: { trace: 'abc123' } }])));
+        });
+
+        it('nulls out the trace id of rows whose project cannot be resolved so they get no broken link', async () => {
+            const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
+            const response = await runQuery(ds, logFrame([tracedRow(), { traceId: 'zzz', labels: { trace: 'zzz' } }]));
+            expect(values(field(response, 'traceId'))).toEqual(['abc123', null]);
+            expect(linkProjects(response)).toEqual(['my-proj', null]);
         });
 
         it('keeps the trace-path project when targets carry a projectId and the flag is off', async () => {
             const ds = makeDataSource({ logsToTraces: { datasourceUid: 'trace-uid' } });
-            const frame = logFrame({ trace: 'projects/my-proj/traces/abc123', traceId: 'abc123' });
             const targets = [{ refId: 'A', projectId: 'other-proj' } as Query];
-            const response = await runQuery(ds, frame, targets);
-
-            const traceField = response.data[0].fields.find((f: { name: string }) => f.name === 'traceId');
-            expect(traceField.config.links[0].internal.query.projectId).toBe('my-proj');
+            const response = await runQuery(ds, logFrame([tracedRow()]), targets);
+            expect(linkProjects(response)).toEqual(['my-proj']);
         });
 
         it('warms the GCE default project for the trace-link fallback when the flag is off', async () => {
@@ -352,13 +386,11 @@ describe('Google Cloud Logging Data Source', () => {
             // The target carries a projectId, so the warm-up is not needed to
             // build the request — only the non-canonical trace-path fallback
             // consumes it when the response is mapped.
-            const frame = logFrame({ trace: 'abc123', traceId: 'abc123' });
             const targets = [{ refId: 'A', projectId: 'some-proj' } as Query];
-            const response = await runQuery(ds, frame, targets);
+            const response = await runQuery(ds, logFrame([{ traceId: 'abc123', labels: { trace: 'abc123' } }]), targets);
 
             expect(gceSpy).toHaveBeenCalled();
-            const traceField = response.data[0].fields.find((f: { name: string }) => f.name === 'traceId');
-            expect(traceField.config.links[0].internal.query.projectId).toBe('gce-proj');
+            expect(linkProjects(response)).toEqual(['gce-proj']);
         });
 
         describe('with projectIdFromQuery enabled', () => {
@@ -372,51 +404,52 @@ describe('Google Cloud Logging Data Source', () => {
                     stubTemplateSrv
                 );
 
-            const linkProject = (response: { data: any[] }) =>
-                response.data[0].fields.find((f: { name: string }) => f.name === 'traceId')?.config.links[0].internal
-                    .query.projectId;
-
-            const routedFrame = () =>
-                logFrame({ trace: 'projects/routing-proj/traces/abc123', traceId: 'abc123' });
+            const routedFrame = () => logFrame([tracedRow('routing-proj')]);
 
             it('uses the projectId of the target that produced the frame, not the trace path', async () => {
                 const ds = makeFlagOnDataSource();
                 const targets = [{ refId: 'A', projectId: 'tenant-proj' } as Query];
                 const response = await runQuery(ds, routedFrame(), targets);
-                expect(linkProject(response)).toBe('tenant-proj');
+                expect(linkProjects(response)).toEqual(['tenant-proj']);
+            });
+
+            it('applies the target project to every row of the frame', async () => {
+                const ds = makeFlagOnDataSource();
+                const targets = [{ refId: 'A', projectId: 'tenant-proj' } as Query];
+                const response = await runQuery(ds, logFrame([tracedRow('routing-a', 't1'), tracedRow('routing-b', 't2')]), targets);
+                expect(linkProjects(response)).toEqual(['tenant-proj', 'tenant-proj']);
             });
 
             it('interpolates template variables in the target projectId', async () => {
                 const ds = makeFlagOnDataSource();
                 const targets = [{ refId: 'A', projectId: '$project' } as Query];
                 const response = await runQuery(ds, routedFrame(), targets);
-                expect(linkProject(response)).toBe('tenant-proj');
+                expect(linkProjects(response)).toEqual(['tenant-proj']);
             });
 
             it('falls back to the default project when no target matches the frame', async () => {
                 const ds = makeFlagOnDataSource({ defaultProject: 'my-default-proj' });
                 const response = await runQuery(ds, routedFrame(), []);
-                expect(linkProject(response)).toBe('my-default-proj');
+                expect(linkProjects(response)).toEqual(['my-default-proj']);
             });
 
             it('falls back to the default project when the matching target has no projectId', async () => {
                 const ds = makeFlagOnDataSource({ defaultProject: 'my-default-proj' });
                 const targets = [{ refId: 'A', projectId: '' } as Query];
                 const response = await runQuery(ds, routedFrame(), targets);
-                expect(linkProject(response)).toBe('my-default-proj');
+                expect(linkProjects(response)).toEqual(['my-default-proj']);
             });
 
             it('ignores hidden targets when resolving the project', async () => {
                 const ds = makeFlagOnDataSource({ defaultProject: 'my-default-proj' });
                 const targets = [{ refId: 'A', projectId: 'tenant-proj', hide: true } as Query];
                 const response = await runQuery(ds, routedFrame(), targets);
-                expect(linkProject(response)).toBe('my-default-proj');
+                expect(linkProjects(response)).toEqual(['my-default-proj']);
             });
 
             it('omits the link when neither a target project nor a default project resolves', async () => {
                 const ds = makeFlagOnDataSource();
-                const response = await runQuery(ds, routedFrame(), []);
-                expect(response.data[0].fields).toHaveLength(2);
+                expectUntouched(await runQuery(ds, routedFrame(), []));
             });
 
             it('pre-resolves the GCE default project so the link fallback works under GCE auth', async () => {
@@ -427,7 +460,7 @@ describe('Google Cloud Logging Data Source', () => {
                 const targets = [{ refId: 'B', projectId: 'other-proj' } as Query];
                 const response = await runQuery(ds, routedFrame(), targets);
                 expect(gceSpy).toHaveBeenCalled();
-                expect(linkProject(response)).toBe('gce-proj');
+                expect(linkProjects(response)).toEqual(['gce-proj']);
             });
         });
     });

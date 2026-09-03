@@ -62,16 +62,17 @@ func GetLogEntryMessage(entry *loggingpb.LogEntry) (string, error) {
 	}
 }
 
-// GetLogLabels flattens a log entry's labels + resource labels into a map
+// GetLogLabels flattens a log entry's labels + resource labels into a map.
+//
+// The entry's insert ID, severity and bare trace ID are deliberately not
+// included: they are emitted as dedicated `id`, `severity` and `traceId`
+// frame fields (see plugin.go), and repeating them here would show them
+// twice in Grafana's log details.
 func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 	labels := make(data.Labels)
 	for k, v := range entry.GetLabels() {
 		labels[fmt.Sprintf("labels.\"%s\"", k)] = v
 	}
-
-	labels["id"] = entry.GetInsertId()
-	// This is how severity is set
-	labels["level"] = GetLogLevel(entry.GetSeverity())
 
 	resource := entry.GetResource()
 	if resourceType := resource.GetType(); resourceType != "" {
@@ -136,24 +137,30 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 
 	// Add trace data.
 	// Contract: the frontend's logs-to-traces feature (src/datasource.ts,
-	// addTraceLinkField) depends on the `trace` and `traceId` label names and
-	// on `trace` carrying the raw LogEntry value in the canonical
-	// `projects/<project>/traces/<id>` form — it re-parses that path to
-	// extract the project for the "View trace" link. Renaming these labels or
-	// changing their format silently breaks that feature; no test crosses the
-	// Go/TS boundary.
-	traceId := entry.GetTrace()
-	spanId := entry.GetSpanId()
-	if traceId != "" {
-		trace := entry.GetTrace()
+	// addTraceLinkField) depends on the `trace` label carrying the raw
+	// LogEntry value in the canonical `projects/<project>/traces/<id>` form —
+	// it re-parses that path per row to extract the project for the
+	// "View trace" link. Changing its name or format silently breaks that
+	// feature; no test crosses the Go/TS boundary.
+	if trace := entry.GetTrace(); trace != "" {
 		labels["trace"] = trace
-		labels["traceId"] = strings.Split(trace, "/")[len(strings.Split(trace, "/"))-1]
 	}
-	if spanId != "" {
-		labels["spanId"] = entry.GetSpanId()
+	if spanId := entry.GetSpanId(); spanId != "" {
+		labels["spanId"] = spanId
 	}
 
 	return labels
+}
+
+// GetTraceID returns the bare trace ID of a log entry (the last path segment
+// of LogEntry.trace, which is normally `projects/<project>/traces/<id>`), or
+// an empty string when the entry carries no trace.
+func GetTraceID(entry *loggingpb.LogEntry) string {
+	trace := entry.GetTrace()
+	if trace == "" {
+		return ""
+	}
+	return trace[strings.LastIndex(trace, "/")+1:]
 }
 
 // GetLogLevel maps the string value of a LogSeverity to one supported by Grafana

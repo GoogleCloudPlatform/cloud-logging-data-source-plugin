@@ -1,4 +1,9 @@
 # Changelog
+## 1.8.0 (2026-09-03)
+* **Breaking: logs responses now use Grafana's dataplane `log-lines` format** ([#221](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/issues/221)). Each query returns a single frame with one row per log entry instead of one frame per entry. Fields are `timestamp`, `body`, `severity`, `id` (the entry's insert ID), `labels` (per-row JSON object) and `traceId`; previously they were `time` and `content` with the metadata attached as labels on `content`. Grafana can now identify each log line uniquely, which fixes log details expanding every line at once, the log list jumping to the top on click, broken permalinks and dedup, and the Logs Table showing only the first line. Dashboards that reference the old `content` or `time` field names in transformations or Table panels need updating
+* "View trace" links are resolved per log line. The project comes from each entry's own trace path (or the query/default project, as before), so a single result set spanning several projects links each line to the right trace
+* An empty result now returns an empty frame with the logs schema instead of no frame
+
 ## 1.7.2 (2026-08-17)
 * Update dependencies to address security vulnerabilities flagged by the Grafana plugin review: js-yaml (CVE-2026-59869) and nanoid (CVE-2026-67213) in the frontend build toolchain
 * Upgrade the Grafana Go plugin SDK from v0.290.0 to v0.296.2
