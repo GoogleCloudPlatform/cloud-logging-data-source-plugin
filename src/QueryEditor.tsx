@@ -34,9 +34,21 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     }
   };
 
-  // Keep a ref to the latest query so async callbacks avoid stale closures
+  // Keep refs to the latest query and callbacks so async work in the
+  // init effect below avoids stale closures. Grafana recreates onChange and
+  // onRunQuery on every render, so they can't be effect dependencies without
+  // re-running the (expensive, side-effecting) init logic each render.
+  // Refs are synced in an effect rather than during render, as required by
+  // react-hooks/refs. Effects run in declaration order, so this one always
+  // runs before the init effect in the same commit.
   const queryRef = useRef(query);
-  queryRef.current = query;
+  const onChangeRef = useRef(onChange);
+  const onRunQueryRef = useRef(onRunQuery);
+  useEffect(() => {
+    queryRef.current = query;
+    onChangeRef.current = onChange;
+    onRunQueryRef.current = onRunQuery;
+  });
 
   // Compute normalized queryText as a derived value (never mutate the prop directly)
   const effectiveQueryText = query.query ?? query.queryText ?? defaultQuery.queryText;
@@ -67,7 +79,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
 
       if (currentProjectId && currentProjectId.startsWith('$')) {
         if (!cancelled && Object.keys(textUpdates).length > 0) {
-          onChange({ ...latestQuery, ...textUpdates });
+          onChangeRef.current({ ...latestQuery, ...textUpdates });
         }
         return;
       }
@@ -102,7 +114,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
           updates.bucketId = '';
         }
         if (Object.keys(updates).length > 0) {
-          onChange({ ...latestQuery, ...updates });
+          onChangeRef.current({ ...latestQuery, ...updates });
         }
         return;
       }
@@ -127,9 +139,9 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       }
 
       if (cancelled) { return; }
-      onChange({ ...latestQuery, ...textUpdates, projectId: newProjectId, bucketId: '', viewId: '' });
+      onChangeRef.current({ ...latestQuery, ...textUpdates, projectId: newProjectId, bucketId: '', viewId: '' });
       if (newProjectId) {
-        onRunQuery();
+        onRunQueryRef.current();
       }
     })();
 
@@ -166,16 +178,26 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     uid: string | null;
     list: Array<SelectableValue<string>>;
   }>({ uid: null, list: [] });
-  const [projectsLoading, setProjectsLoading] = useState(false);
+  // Search-triggered loads are tagged with the DS uid they were started for,
+  // so a stale in-flight search for a previous datasource never shows a
+  // spinner for the current one.
+  const [searchLoadingUid, setSearchLoadingUid] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
-  const projectsForCurrentDs = projectsState.uid === datasource.uid
-    ? projectsState.list
-    : [];
+  // Memoized so its identity is stable between renders; it is a dependency of
+  // the bucket-loading effect below.
+  const projectsForCurrentDs = useMemo(
+    () => (projectsState.uid === datasource.uid ? projectsState.list : []),
+    [projectsState, datasource.uid]
+  );
+  // Derived rather than stored: the picker is loading whenever the loaded
+  // list doesn't belong to the current DS yet, or a search for the current
+  // DS is in flight. Storing this as state would require a synchronous
+  // setState inside the effect below (react-hooks/set-state-in-effect).
+  const projectsLoading = projectsState.uid !== datasource.uid || searchLoadingUid === datasource.uid;
 
   useEffect(() => {
     let cancelled = false;
     const loadingForUid = datasource.uid;
-    setProjectsLoading(true);
     datasource.getFilteredProjects()
       .then(res => {
         if (cancelled) { return; }
@@ -189,9 +211,6 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         if (cancelled) { return; }
         setProjectsState({ uid: loadingForUid, list: [] });
         setFetchError(sanitizeFetchError(err));
-      })
-      .finally(() => {
-        if (!cancelled) { setProjectsLoading(false); }
       });
     return () => {
       cancelled = true;
@@ -202,7 +221,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   const onProjectSearchChange = useCallback((value: string) => {
     if (searchTimer.current) { clearTimeout(searchTimer.current); }
     const searchDsUid = datasource.uid;
-    setProjectsLoading(true);
+    setSearchLoadingUid(searchDsUid);
     searchTimer.current = setTimeout(() => {
       datasource.getFilteredProjects(value || undefined)
         .then(res => {
@@ -221,7 +240,8 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
           setFetchError(sanitizeFetchError(err));
         })
         .finally(() => {
-          if (searchDsUid === datasource.uid) { setProjectsLoading(false); }
+          // Only clear the flag if no newer search superseded this one.
+          setSearchLoadingUid(current => (current === searchDsUid ? null : current));
         });
     }, 300);
   }, [datasource]);
@@ -313,7 +333,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     }
 
     return `https://console.cloud.google.com/logs/query?${queryParams.join('&')}`;
-  }, [query, range]);
+  }, [query, range, effectiveQueryText]);
 
   return (
     <>

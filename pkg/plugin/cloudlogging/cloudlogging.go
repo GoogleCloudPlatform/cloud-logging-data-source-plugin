@@ -98,7 +98,7 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 			if err := t.ProtoPayload.UnmarshalTo(&a); err != nil {
 				log.DefaultLogger.Error("Could not get AuditLog payload out of LogEntry", "error", err)
 			} else {
-				byteArr, _ := json.Marshal(a)
+				byteArr, _ := json.Marshal(&a)
 				var inInterface map[string]*structpb.Value
 				json.Unmarshal(byteArr, &inInterface)
 				for k, v := range inInterface {
@@ -110,7 +110,7 @@ func GetLogLabels(entry *loggingpb.LogEntry) data.Labels {
 			if err := t.ProtoPayload.UnmarshalTo(&r); err != nil {
 				log.DefaultLogger.Error("Could not get RequestLog payload out of LogEntry", "error", err)
 			} else {
-				byteArr, _ := json.Marshal(r)
+				byteArr, _ := json.Marshal(&r)
 				var inInterface map[string]*structpb.Value
 				json.Unmarshal(byteArr, &inInterface)
 				for k, v := range inInterface {
