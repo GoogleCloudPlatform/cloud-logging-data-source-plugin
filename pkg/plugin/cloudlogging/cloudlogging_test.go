@@ -456,3 +456,30 @@ func normalizeLabelSpaces(labels data.Labels) data.Labels {
 	}
 	return normalized
 }
+
+func TestQueryString(t *testing.T) {
+	timeRange := struct {
+		From string
+		To   string
+	}{From: "2026-01-01T00:00:00Z", To: "2026-01-02T00:00:00Z"}
+	suffix := `timestamp >= "2026-01-01T00:00:00Z" AND timestamp <= "2026-01-02T00:00:00Z"`
+
+	testCases := []struct {
+		name     string
+		filter   string
+		expected string
+	}{
+		{name: "simple filter", filter: `severity >= DEFAULT`, expected: `severity >= DEFAULT AND ` + suffix},
+		{name: "top-level OR is left as is (OR binds tighter than AND)", filter: `a="1" OR b="2"`, expected: `a="1" OR b="2" AND ` + suffix},
+		{name: "multi-line filter keeps inner newlines", filter: "a=\"1\"\nb=\"2\"", expected: "a=\"1\"\nb=\"2\" AND " + suffix},
+		{name: "surrounding whitespace is trimmed", filter: "  severity >= DEFAULT \n", expected: `severity >= DEFAULT AND ` + suffix},
+		{name: "empty filter yields only the time range", filter: "", expected: suffix},
+		{name: "whitespace-only filter yields only the time range", filter: " \n\t", expected: suffix},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			q := &cloudlogging.Query{Filter: tc.filter, TimeRange: timeRange}
+			require.Equal(t, tc.expected, q.String())
+		})
+	}
+}

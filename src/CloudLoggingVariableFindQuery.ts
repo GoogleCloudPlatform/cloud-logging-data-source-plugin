@@ -15,79 +15,76 @@
  */
 
 import { SelectableValue } from '@grafana/data';
+import { getTemplateSrv } from '@grafana/runtime';
 import { DataSource } from './datasource';
 import { CloudLoggingVariableQuery, LogFindQueryScopes } from './types';
-import { getTemplateSrv } from '@grafana/runtime';
 
+const toOption = (value: string): SelectableValue<string> => ({ text: value, value, expandable: true });
+
+/**
+ * Resolves the values of a Cloud Logging query variable.
+ *
+ * Errors are deliberately not swallowed: Grafana shows them in the variable
+ * editor and dashboard settings, which beats silently offering no values
+ * (a disabled Cloud Resource Manager API, for example, used to look like an
+ * empty project list).
+ */
 export default class CloudLoggingVariableFindQuery {
     constructor(private datasource: DataSource) { }
 
-    async execute(query: CloudLoggingVariableQuery) {
-        try {
-            if (!query.projectId) {
-                query.projectId = await this.datasource.getDefaultProject();
-            }
-            switch (query.selectedQueryType) {
-                case LogFindQueryScopes.Projects:
-                    return this.handleProjectsQuery();
-                case LogFindQueryScopes.Buckets:
-                    return this.handleBucketQuery(query)
-                case LogFindQueryScopes.Views:
-                    return this.handleViewQuery(query)
-                default:
-                    return [];
-            }
-        } catch (error) {
-            console.error(`Could not run CloudLoggingVariableFindQuery ${query}`, error);
-            return [];
+    async execute(query: CloudLoggingVariableQuery): Promise<Array<SelectableValue<string>>> {
+        const projectId = query.projectId || (await this.datasource.getDefaultProject());
+        switch (query.selectedQueryType) {
+            case LogFindQueryScopes.Projects:
+                return this.handleProjectsQuery();
+            case LogFindQueryScopes.Buckets:
+                return this.handleBucketQuery(projectId);
+            case LogFindQueryScopes.Views:
+                return this.handleViewQuery(projectId, query.bucketId);
+            default:
+                return [];
         }
     }
 
     async handleProjectsQuery() {
         const projects = await this.datasource.getFilteredProjects();
-        return (projects).map((s) => ({
-            text: s,
-            value: s,
-            expandable: true,
-        } as SelectableValue<string>));
+        return projects.map(toOption);
     }
 
-    async handleBucketQuery({ projectId }: CloudLoggingVariableQuery) {
-        let buckets: string[] = [];
-        let p = projectId
-        if (projectId.startsWith('$')) {
-            p = getTemplateSrv().replace(projectId)
-        }
-        buckets = await this.datasource.getFilteredBuckets(p);
-        return (buckets).map((s) => ({
-            text: s,
-            value: s,
-            expandable: true,
-        } as SelectableValue<string>));
+    async handleBucketQuery(projectId: string) {
+        const buckets = await this.datasource.getFilteredBuckets(this.resolveProject(projectId, 'log buckets'));
+        return buckets.map(toOption);
     }
 
-    async handleViewQuery({ projectId, bucketId }: CloudLoggingVariableQuery) {
+    async handleViewQuery(projectId: string, bucketId?: string) {
         if (!bucketId) {
-            return []
+            return [];
         }
-        let views: string[] = [];
-        let p = projectId
-        if (projectId.startsWith('$')) {
-            p = getTemplateSrv().replace(projectId)
-        }
-        let b = bucketId
-        if (bucketId.startsWith('$')) {
-            b = getTemplateSrv().replace(bucketId)
-        }
+        const bucket = this.interpolate(bucketId);
         // Return if we don't know the bucket
-        if (!b) {
-            return []
+        if (!bucket) {
+            return [];
         }
-        views = await this.datasource.getLogBucketViews(p, b);
-        return (views).map((s) => ({
-            text: s,
-            value: s,
-            expandable: true,
-        } as SelectableValue<string>));
+        const views = await this.datasource.getLogBucketViews(this.resolveProject(projectId, 'log views'), bucket);
+        return views.map(toOption);
+    }
+
+    /** Interpolates a `$variable` reference; other values pass through. */
+    private interpolate(value: string): string {
+        return value.startsWith('$') ? getTemplateSrv().replace(value) : value;
+    }
+
+    /**
+     * The backend rejects an empty project, so fail with a message that says
+     * what to do rather than "Missing required parameter: ProjectId".
+     */
+    private resolveProject(projectId: string, what: string): string {
+        const project = this.interpolate(projectId);
+        if (!project) {
+            throw new Error(
+                `Cannot list ${what}: select a project in the variable query or configure a default project on the data source.`
+            );
+        }
+        return project;
     }
 }

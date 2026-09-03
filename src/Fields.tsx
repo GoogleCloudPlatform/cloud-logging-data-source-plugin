@@ -25,6 +25,8 @@ interface VariableQueryFieldProps {
   value: string;
   label: string;
   allowCustomValue?: boolean;
+  isLoading?: boolean;
+  inputId?: string;
 }
 
 export const VariableQueryField = ({
@@ -33,12 +35,16 @@ export const VariableQueryField = ({
   value,
   options,
   allowCustomValue = false,
+  isLoading = false,
+  inputId,
 }: VariableQueryFieldProps) => {
   return (
     <InlineField label={label} labelWidth={20}>
       <Select
         width={25}
+        inputId={inputId}
         allowCustomValue={allowCustomValue}
+        isLoading={isLoading}
         value={value}
         onChange={({ value }) => onChange(value!)}
         options={options}
