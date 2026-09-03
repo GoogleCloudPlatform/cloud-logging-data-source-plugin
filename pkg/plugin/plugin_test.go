@@ -16,8 +16,15 @@ package plugin
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
 	"encoding/json"
+	"encoding/pem"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -458,7 +465,7 @@ func TestNewCloudLoggingDatasource_AuthOverride(t *testing.T) {
 		settings := backend.DataSourceInstanceSettings{
 			JSONData: []byte(jsonData),
 			DecryptedSecureJSONData: map[string]string{
-				privateKeyKey:  "dummy-private-key",
+				"privateKey":   "dummy-private-key",
 				accessTokenKey: "dummy-access-token",
 			},
 		}
@@ -504,6 +511,81 @@ func TestNewCloudLoggingDatasource_AuthOverride(t *testing.T) {
 		ds, ok := inst.(*CloudLoggingDatasource)
 		require.True(t, ok)
 		require.Equal(t, true, ds.oauthPassThrough)
+	})
+}
+
+// testPrivateKeyPEM returns a freshly generated PKCS#8 private key in PEM
+// form, i.e. what the `private_key` field of a service account JSON file
+// contains once its JSON escapes are decoded.
+func testPrivateKeyPEM(t *testing.T) string {
+	t.Helper()
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	der, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	return string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: der}))
+}
+
+const jwtJSONData = `{"authenticationType": "jwt", "clientEmail": "sa@test-project.iam.gserviceaccount.com", "defaultProject": "test-project", "tokenUri": "https://oauth2.googleapis.com/token"}`
+
+func TestNewCloudLoggingDatasource_JWTPrivateKey(t *testing.T) {
+	pemKey := testPrivateKeyPEM(t)
+
+	t.Run("key with real line breaks", func(t *testing.T) {
+		inst, err := NewCloudLoggingDatasource(context.Background(), backend.DataSourceInstanceSettings{
+			JSONData:                []byte(jwtJSONData),
+			DecryptedSecureJSONData: map[string]string{"privateKey": pemKey},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, inst.(*CloudLoggingDatasource).client)
+	})
+
+	// Regression for #76 / #202: keys provisioned via YAML, Terraform or env
+	// vars often keep the JSON file's literal `\n` escapes.
+	t.Run("key with literal backslash-n escapes", func(t *testing.T) {
+		escaped := strings.ReplaceAll(pemKey, "\n", `\n`)
+		require.NotContains(t, escaped, "\n")
+		inst, err := NewCloudLoggingDatasource(context.Background(), backend.DataSourceInstanceSettings{
+			JSONData:                []byte(jwtJSONData),
+			DecryptedSecureJSONData: map[string]string{"privateKey": escaped},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, inst.(*CloudLoggingDatasource).client)
+	})
+
+	t.Run("key read from privateKeyPath", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "key.pem")
+		require.NoError(t, os.WriteFile(path, []byte(pemKey), 0o600))
+		jsonData := strings.TrimSuffix(jwtJSONData, "}") + `, "privateKeyPath": "` + path + `"}`
+		inst, err := NewCloudLoggingDatasource(context.Background(), backend.DataSourceInstanceSettings{
+			JSONData: []byte(jsonData),
+		})
+		require.NoError(t, err)
+		require.NotNil(t, inst.(*CloudLoggingDatasource).client)
+	})
+
+	t.Run("unreadable privateKeyPath is reported", func(t *testing.T) {
+		jsonData := strings.TrimSuffix(jwtJSONData, "}") + `, "privateKeyPath": "/nonexistent/key.pem"}`
+		_, err := NewCloudLoggingDatasource(context.Background(), backend.DataSourceInstanceSettings{
+			JSONData: []byte(jsonData),
+		})
+		require.ErrorContains(t, err, "read private key")
+	})
+
+	t.Run("missing key", func(t *testing.T) {
+		_, err := NewCloudLoggingDatasource(context.Background(), backend.DataSourceInstanceSettings{
+			JSONData: []byte(jwtJSONData),
+		})
+		require.ErrorIs(t, err, errMissingCredentials)
+	})
+
+	t.Run("malformed key gets an explanatory error", func(t *testing.T) {
+		_, err := NewCloudLoggingDatasource(context.Background(), backend.DataSourceInstanceSettings{
+			JSONData:                []byte(jwtJSONData),
+			DecryptedSecureJSONData: map[string]string{"privateKey": "-----BEGIN PRIVATE KEY-----\nnot-a-key\n-----END PRIVATE KEY-----\n"},
+		})
+		require.ErrorContains(t, err, "create client")
+		require.ErrorContains(t, err, "including its line breaks")
 	})
 }
 

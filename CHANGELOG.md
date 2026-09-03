@@ -5,6 +5,7 @@
 * An empty result now returns an empty frame with the logs schema instead of no frame
 * Fix the query variable editor getting stuck on "Loading..." ([#212](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/issues/212)). The editor no longer fetches buckets for an empty project or lists projects before they are needed; option lists load per scope, failures are shown inline instead of freezing the editor, and variable query errors (for example a disabled Cloud Resource Manager API) now surface in Grafana instead of silently producing no values. Selecting a scope is saved immediately
 * Fix an empty query text producing an unparseable filter (a leading `AND`); the time range alone is sent instead
+* Fix JWT authentication failing with "An error occurred within the plugin" when the data source is provisioned (YAML, Terraform, environment variables) and the private key contains literal `\n` escape sequences instead of line breaks ([#76](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/issues/76), [#202](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/issues/202)). The key is now read the same way as in the Google Cloud Monitoring data source, which also adds support for `privateKeyPath`. A key that still fails to parse produces an explanatory error instead of a generic one
 
 ## 1.7.2 (2026-08-17)
 * Update dependencies to address security vulnerabilities flagged by the Grafana plugin review: js-yaml (CVE-2026-59869) and nanoid (CVE-2026-67213) in the frontend build toolchain

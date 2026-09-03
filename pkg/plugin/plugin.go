@@ -43,7 +43,6 @@ var (
 )
 
 const (
-	privateKeyKey                  = "privateKey"
 	gceAuthentication              = "gce"
 	jwtAuthentication              = "jwt"
 	accessTokenAuthentication      = "accessToken"
@@ -97,16 +96,23 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		conf.AuthType = jwtAuthentication
 	}
 
+	// Read the private key the same way the other Google data sources do
+	// (grafana-google-sdk-go): from `privateKeyPath` if set, else from the
+	// `privateKey` secret, with literal `\n` sequences turned into newlines.
+	// Provisioned keys (YAML, Terraform, env vars) often arrive with the
+	// escapes intact, which the credentials parser rejects (#76, #202).
+	privateKey, err := utils.GetPrivateKey(&settings)
+	if err != nil {
+		return nil, fmt.Errorf("read private key: %s", sanitizeErrorMessage(err))
+	}
+
 	// Only auto-switch to accessToken if the auth type is jwt (the default) and
 	// no JWT private key was provided. This preserves backward compat for
 	// pre-dropdown users (v1.5.0) who only set an access token, without hijacking
 	// explicitly-chosen auth types like GCE or OAuth.
-	if conf.AuthType == jwtAuthentication {
+	if conf.AuthType == jwtAuthentication && privateKey == "" {
 		if accessToken, ok := settings.DecryptedSecureJSONData[accessTokenKey]; ok && accessToken != "" {
-			privateKey, hasKey := settings.DecryptedSecureJSONData[privateKeyKey]
-			if !hasKey || privateKey == "" {
-				conf.AuthType = accessTokenAuthentication
-			}
+			conf.AuthType = accessTokenAuthentication
 		}
 	}
 
@@ -117,8 +123,7 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 
 	switch conf.AuthType {
 	case jwtAuthentication:
-		privateKey, ok := settings.DecryptedSecureJSONData[privateKeyKey]
-		if !ok || privateKey == "" {
+		if privateKey == "" {
 			return nil, errMissingCredentials
 		}
 
@@ -151,7 +156,11 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 	}
 
 	if client_err != nil {
-		return nil, fmt.Errorf("create client: %s", sanitizeErrorMessage(client_err))
+		msg := sanitizeErrorMessage(client_err)
+		if conf.AuthType == jwtAuthentication && strings.Contains(msg, "parse key") {
+			msg += " (the privateKey must be the complete PEM block from the service account JSON file, including its line breaks)"
+		}
+		return nil, fmt.Errorf("create client: %s", msg)
 	}
 
 	return &CloudLoggingDatasource{

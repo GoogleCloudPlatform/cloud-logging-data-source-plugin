@@ -152,6 +152,28 @@ datasources:
       # universeDomain: googleapis.com
 ```
 
+To provision a service account key (JWT authentication) instead, supply the fields from the service account JSON file. The private key goes in `secureJsonData`, either inline or via a file path:
+
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Google Cloud Logging
+    type: googlecloud-logging-datasource
+    access: proxy
+    jsonData:
+      authenticationType: jwt
+      clientEmail: my-service-account@my-project.iam.gserviceaccount.com
+      defaultProject: my-project
+      tokenUri: https://oauth2.googleapis.com/token
+      # Alternative to secureJsonData.privateKey: read the PEM file from disk
+      # privateKeyPath: /etc/secrets/gcp-logging-private-key.pem
+    secureJsonData:
+      privateKey: $__file{/etc/secrets/gcp-logging-private-key.pem}
+```
+
+The same `jsonData` and `secureJsonData` fields work with the Grafana Terraform provider's `grafana_data_source` resource. The `privateKey` value is the `private_key` field of the service account JSON file. It may be passed with real line breaks or with the literal `\n` escape sequences as they appear in the JSON file; both are accepted.
+
 ### Supported variables
 
 The plugin currently supports variables for logging scopes. For example, you can define a project variable and switch between projects. The following screenshot shows an example using project, bucket, and view.
