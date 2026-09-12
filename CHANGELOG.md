@@ -1,4 +1,11 @@
 # Changelog
+## 1.8.1 (2026-09-12)
+* Address security findings from the Grafana plugin review of v1.8.0:
+  * Update google.golang.org/grpc from v1.83.1 to v1.83.2 to fix CVE-2026-84445 (xDS server denial of service); golang.org/x/net moves to v0.58.0 as a consequence
+  * Update js-yaml in the frontend build toolchain to 3.15.2 and 4.3.2 to fix CVE-2026-84375
+  * datasource-syncer: enforce TLS 1.2 as the minimum protocol version for the Grafana API client and only disable certificate verification when `--insecure-skip-verify` is explicitly passed (gosec G402)
+* GO-2026-5932 (unmaintained `golang.org/x/crypto/openpgp`) remains reported by govulncheck; the package is not used by this plugin and has no fixed version
+
 ## 1.8.0 (2026-09-03)
 * **Breaking: logs responses now use Grafana's dataplane `log-lines` format** ([#221](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/issues/221)). Each query returns a single frame with one row per log entry instead of one frame per entry. Fields are `timestamp`, `body`, `severity`, `id` (the entry's insert ID), `labels` (per-row JSON object) and `traceId`; previously they were `time` and `content` with the metadata attached as labels on `content`. Grafana can now identify each log line uniquely, which fixes log details expanding every line at once, the log list jumping to the top on click, broken permalinks and dedup, and the Logs Table showing only the first line. Dashboards that reference the old `content` or `time` field names in transformations or Table panels need updating
 * "View trace" links are resolved per log line. The project comes from each entry's own trace path (or the query/default project, as before), so a single result set spanning several projects links each line to the right trace

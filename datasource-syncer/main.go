@@ -215,7 +215,12 @@ func getTLSClient(certFile, keyFile, caFile string, insecureSkipVerify bool) (*h
 	}
 
 	tlsConfig := &tls.Config{
-		InsecureSkipVerify: insecureSkipVerify,
+		MinVersion: tls.VersionTLS12,
+	}
+	if insecureSkipVerify {
+		// Explicit operator opt-in via the --insecure-skip-verify flag, intended for
+		// Grafana instances with self-signed certificates in test environments.
+		tlsConfig.InsecureSkipVerify = true // #nosec G402 -- opt-in via --insecure-skip-verify flag
 	}
 
 	if certFile != "" && keyFile != "" {
