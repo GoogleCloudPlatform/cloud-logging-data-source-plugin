@@ -724,3 +724,34 @@ func TestCallResource_LogViews_MissingBucketId(t *testing.T) {
 	require.Equal(t, 400, sender.resp.Status)
 	require.Contains(t, string(sender.resp.Body), "BucketId")
 }
+
+func TestCallResource_ProjectExists(t *testing.T) {
+	client := mocks.NewAPI(t)
+	client.On("ProjectExists", mock.Anything, "my-project").Return(true, nil)
+	ds := &CloudLoggingDatasource{client: client}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "projectExists",
+		URL:  "projectExists?ProjectId=my-project",
+	}, sender)
+
+	require.NoError(t, err)
+	require.Equal(t, 200, sender.resp.Status)
+	require.Equal(t, "true", string(sender.resp.Body))
+}
+
+func TestCallResource_ProjectExists_MissingProjectId(t *testing.T) {
+	client := mocks.NewAPI(t)
+	ds := &CloudLoggingDatasource{client: client}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "projectExists",
+		URL:  "projectExists",
+	}, sender)
+
+	require.NoError(t, err)
+	require.Equal(t, 400, sender.resp.Status)
+	require.Contains(t, string(sender.resp.Body), "ProjectId")
+}

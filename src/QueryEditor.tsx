@@ -105,6 +105,15 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
           // any real access error.
           isValid = true;
         }
+        if (!isValid) {
+          // The list is capped at 100 unordered projects, so check the project directly.
+          try {
+            isValid = await datasource.projectExists(currentProjectId);
+          } catch {
+            isValid = false;
+          }
+          if (cancelled) { return; }
+        }
       }
 
       if (isValid) {
@@ -183,8 +192,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   // spinner for the current one.
   const [searchLoadingUid, setSearchLoadingUid] = useState<string | null>(null);
   const searchTimer = useRef<ReturnType<typeof setTimeout>>();
-  // Memoized so its identity is stable between renders; it is a dependency of
-  // the bucket-loading effect below.
+  // Memoized so its identity is stable between renders.
   const projectsForCurrentDs = useMemo(
     () => (projectsState.uid === datasource.uid ? projectsState.list : []),
     [projectsState, datasource.uid]
@@ -250,15 +258,20 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   useEffect(() => {
     if (!query.projectId || query.projectId.startsWith('$')) { return; }
     if (projectsLoading) { return; }
-    if (projectsForCurrentDs.length > 0 && !projectsForCurrentDs.some(p => p.value === query.projectId)) { return; }
+    if (datasource.filterProjects([query.projectId]).length === 0) { return; }
+    let cancelled = false;
     datasource.getFilteredBuckets(query.projectId).then(res => {
+      if (cancelled) { return; }
       setBuckets(res.map(bucket => ({
         label: bucket,
         value: bucket,
       })));
       setFetchError(undefined);
-    }).catch(err => setFetchError(sanitizeFetchError(err)));
-  }, [datasource, query.projectId, projectsLoading, projectsForCurrentDs]);
+    }).catch(err => {
+      if (!cancelled) { setFetchError(sanitizeFetchError(err)); }
+    });
+    return () => { cancelled = true; };
+  }, [datasource, query.projectId, projectsLoading]);
 
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {

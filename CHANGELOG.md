@@ -1,4 +1,7 @@
 # Changelog
+## 1.8.2 (2026-11-06)
+* Fix the query editor resetting a saved project to the default project when the project is not in the first 100 results of the project list. The editor now checks whether the project exists before resetting it.
+
 ## 1.8.1 (2026-09-12)
 * Address security findings from the Grafana plugin review of v1.8.0:
   * Update google.golang.org/grpc from v1.83.1 to v1.83.2 to fix CVE-2026-84445 (xDS server denial of service); golang.org/x/net moves to v0.58.0 as a consequence
