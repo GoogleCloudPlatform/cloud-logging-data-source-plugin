@@ -5,7 +5,7 @@
 The Google Cloud Logging Data Source is a backend data source plugin for Grafana,
 which allows users to query and visualize their Google Cloud logs in Grafana.
 
-![image info](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/cloud_logging_explore_view.png?raw=true)
+![image info](https://raw.githubusercontent.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/main/src/img/cloud_logging_explore_view.png)
 
 ## Setup
 
@@ -43,7 +43,7 @@ If you host Grafana on a GCE VM, you can also use the [Compute Engine service ac
 
 For local development or any environment configured with [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) (for example after running `gcloud auth application-default login` or setting `GOOGLE_APPLICATION_CREDENTIALS`), select **GCE Default Service Account / ADC** (`authenticationType: gce`) and optionally set **Default Project ID** (`defaultProject`) to target a specific project without querying the GCE metadata server.
 
-Similar to [Prometheus data sources on Google Cloud](https://cloud.google.com/stackdriver/docs/managed-prometheus/query#use-serverless), you can also configure a scheduled job to use an OAuth2 access token to view the logs. Please follow the steps in the [data source syncer README](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/datasource-syncer/README.md) to configure it.
+Similar to [Prometheus data sources on Google Cloud](https://cloud.google.com/stackdriver/docs/managed-prometheus/query#use-serverless), you can also configure a scheduled job to use an OAuth2 access token to view the logs. Please follow the steps in the [data source syncer README](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/tree/main/datasource-syncer) to configure it.
 
 ### Service account impersonation
 
@@ -80,7 +80,7 @@ If your Grafana instance has the Secure SOCKS Proxy (`secureSocksDSProxyEnabled`
 7. Optionally, configure the **Log Bucket Filter** to include or exclude specific log buckets from the bucket dropdown (see [Log Bucket Filter](#log-bucket-filter) below)
 8. Click "Save & test" to test that logs can be queried from Cloud Logging
 
-![image info](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/cloud_logging_config.png?raw=true)
+![image info](https://raw.githubusercontent.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/main/src/img/cloud_logging_config.png)
 
 ### Project List Filter
 
@@ -192,10 +192,10 @@ The same `jsonData` and `secureJsonData` fields work with the Grafana Terraform 
 
 The plugin currently supports variables for logging scopes. For example, you can define a project variable and switch between projects. The following screenshot shows an example using project, bucket, and view.
 
-![template variables](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/template_vars.png?raw=true)
+![template variables](https://raw.githubusercontent.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/main/src/img/template_vars.png)
 
 Below is an example of defining a variable for log views.
-![define a variable](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/template_query_vars.png?raw=true)
+![define a variable](https://raw.githubusercontent.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/main/src/img/template_query_vars.png)
 
 #### Ad hoc filters
 

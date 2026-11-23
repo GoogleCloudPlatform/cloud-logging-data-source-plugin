@@ -29,7 +29,7 @@
       },
       {
         "name": "License",
-        "url": "https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/master/LICENSE"
+        "url": "https://raw.githubusercontent.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/main/LICENSE"
       }
     ],
     "screenshots": [

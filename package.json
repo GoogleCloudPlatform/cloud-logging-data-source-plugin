@@ -73,7 +73,8 @@
     "minimatch": "^3.1.5",
     "serialize-javascript": "^7.0.4",
     "flatted": "^3.4.0",
-    "**/picomatch": "^4.0.4"
+    "**/picomatch": "^4.0.4",
+    "zod": "^4.6.7"
   },
   "engines": {
     "node": ">=20"
