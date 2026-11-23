@@ -267,10 +267,21 @@ func TestPDC_GRPCAndHTTPThroughSOCKS5(t *testing.T) {
 	go func() { _ = grpcSrv.Serve(grpcLis) }()
 	t.Cleanup(grpcSrv.Stop)
 
-	// 2. Start in-process fake OAuth2 token server.
+	// 2. Start in-process fake OAuth2 token server that also checks no
+	// datasource BasicAuth or custom HTTP headers leak onto token requests.
 	var oauthHits atomic.Int32
+	var headerMu sync.Mutex
+	var leakedAuthHeader, leakedCustomHeader string
 	oauthSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		oauthHits.Add(1)
+		headerMu.Lock()
+		if v := r.Header.Get("Authorization"); v != "" {
+			leakedAuthHeader = v
+		}
+		if v := r.Header.Get("X-Leak-Header"); v != "" {
+			leakedCustomHeader = v
+		}
+		headerMu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"access_token":"pdc-jwt-token","token_type":"Bearer","expires_in":3600}`))
 	}))
@@ -318,10 +329,16 @@ func TestPDC_GRPCAndHTTPThroughSOCKS5(t *testing.T) {
 	})
 	ctx := backend.WithGrafanaConfig(context.Background(), grafanaCfg)
 	settings := backend.DataSourceInstanceSettings{
-		UID:      "pdc-test-uid",
-		Type:     "googlecloud-logging-datasource",
-		Name:     "pdc-test-logging",
-		JSONData: json.RawMessage(`{"authenticationType":"jwt","enableSecureSocksProxy":true}`),
+		UID:              "pdc-test-uid",
+		Type:             "googlecloud-logging-datasource",
+		Name:             "pdc-test-logging",
+		BasicAuthEnabled: true,
+		BasicAuthUser:    "leak-user",
+		JSONData:         json.RawMessage(`{"authenticationType":"jwt","enableSecureSocksProxy":true,"httpHeaderName1":"X-Leak-Header"}`),
+		DecryptedSecureJSONData: map[string]string{
+			"basicAuthPassword": "leak-pass",
+			"httpHeaderValue1":  "leak-secret",
+		},
 	}
 
 	proxyCfg, err := buildProxyConfig(ctx, settings)
@@ -377,6 +394,10 @@ func TestPDC_GRPCAndHTTPThroughSOCKS5(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "pdc-jwt-token", tok.Value)
 		require.GreaterOrEqual(t, oauthHits.Load(), int32(1))
+		headerMu.Lock()
+		require.Empty(t, leakedAuthHeader, "datasource BasicAuth must not leak onto OAuth2 token calls")
+		require.Empty(t, leakedCustomHeader, "datasource custom HTTP headers must not leak onto OAuth2 token calls")
+		headerMu.Unlock()
 		require.Contains(t, socks.records(), socks5DialRecord{
 			ATYP: 0x03,
 			Host: "fake-oauth.internal",

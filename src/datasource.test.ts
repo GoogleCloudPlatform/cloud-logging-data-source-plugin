@@ -764,6 +764,42 @@ describe('Google Cloud Logging Data Source', () => {
             expect(() =>
                 ds.applyTemplateVariables(query, {} as ScopedVars, [filter('resource.type', '=|', 'k8s_container')])
             ).toThrow(/Unsupported Ad Hoc filter operator/);
+            expect(() =>
+                ds.applyTemplateVariables(query, {} as ScopedVars, [
+                    { key: 'severity', operator: '=|', value: '', values: ['INFO', 'ERROR'] } as unknown as AdHocVariableFilter,
+                ])
+            ).toThrow(/Unsupported Ad Hoc filter operator/);
+        });
+
+        it('rejects multi-value or labeled empty-value filter chips instead of silently dropping them', () => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'my-proj', queryText: 'resource.type="gce_instance"' } as Query;
+            expect(() =>
+                ds.applyTemplateVariables(query, {} as ScopedVars, [
+                    { key: 'severity', operator: '=', value: '', values: ['', 'INFO'] } as unknown as AdHocVariableFilter,
+                ])
+            ).toThrow(/Multi-value Ad Hoc filters are not supported/);
+            expect(() =>
+                ds.applyTemplateVariables(query, {} as ScopedVars, [
+                    { key: 'severity', operator: '=', value: '', valueLabels: ['', 'INFO'] } as unknown as AdHocVariableFilter,
+                ])
+            ).toThrow(/Multi-value Ad Hoc filters are not supported/);
+            expect(() =>
+                ds.applyTemplateVariables(query, {} as ScopedVars, [
+                    { key: 'severity', operator: '=', value: '', valueLabels: ['INFO'] } as unknown as AdHocVariableFilter,
+                ])
+            ).toThrow(/Invalid Ad Hoc filter value/);
+        });
+
+        it('reads a single non-empty value from filter.values when filter.value is empty and still ignores incomplete picks', () => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'my-proj', queryText: 'resource.type="gce_instance"' } as Query;
+            const singleFromValues = ds.applyTemplateVariables(query, {} as ScopedVars, [
+                { key: 'severity', operator: '=', value: '', values: ['INFO'] } as unknown as AdHocVariableFilter,
+                { key: 'logName', operator: '=', value: '', values: [''] } as unknown as AdHocVariableFilter,
+                { key: 'resource.type', operator: '=', value: '', values: [] } as unknown as AdHocVariableFilter,
+            ]);
+            expect(singleFromValues.queryText).toBe('resource.type="gce_instance"\nseverity="INFO"');
         });
 
         it('forwards ad hoc filters through interpolateVariablesInQueries', () => {

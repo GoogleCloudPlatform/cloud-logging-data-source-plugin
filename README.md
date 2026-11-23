@@ -67,7 +67,7 @@ Leave this field empty to use the default `googleapis.com` domain.
 
 ### Private Data Source Connect (PDC)
 
-If your Grafana instance has the Secure SOCKS Proxy (`secureSocksDSProxyEnabled`) enabled — for example, Grafana Cloud with [Private Data Source Connect (PDC)](https://grafana.com/docs/grafana-cloud/connect-externally-hosted/private-data-source-connect/) into a VPC Service Controls (VPC-SC) perimeter — enable **Secure Socks Proxy** (`enableSecureSocksProxy: true` in `jsonData`) in the data source settings. Both gRPC API calls and OAuth2/impersonation token requests are routed through the configured SOCKS proxy.
+If your Grafana instance has the Secure SOCKS Proxy (`secureSocksDSProxyEnabled`) enabled — for example, Grafana Cloud with [Private Data Source Connect (PDC)](https://grafana.com/docs/grafana-cloud/connect-externally-hosted/private-data-source-connect/) into a VPC Service Controls (VPC-SC) perimeter — enable **Secure Socks Proxy** (`enableSecureSocksProxy: true` in `jsonData`) in the data source settings. Cloud Logging and Resource Manager gRPC calls (`logging.googleapis.com:443`, `cloudresourcemanager.googleapis.com:443`) — as well as OAuth2 / IAM token requests (`oauth2.googleapis.com:443`, `iamcredentials.googleapis.com:443`) when using service account impersonation or non-GCE ADC — are routed through the configured SOCKS proxy. Direct JWT authentication uses self-signed JWTs without calling `oauth2.googleapis.com`.
 
 ### Grafana Configuration
 

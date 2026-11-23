@@ -1,6 +1,19 @@
 # Changelog
-## 1.8.2 (2026-11-06)
-* Fix the query editor resetting a saved project to the default project when the project is not in the first 100 results of the project list. The editor now checks whether the project exists before resetting it.
+## 1.9.0 (2026-11-23)
+* **Features:**
+  * Add Private Data Source Connect (PDC) / Secure SOCKS Proxy support for routing Cloud Logging gRPC and OAuth2/impersonation requests through Grafana's Secure SOCKS Proxy (#93, #247).
+  * Add Grafana Ad Hoc filters support for dashboard variables and Logs panel filtering, with field/value suggestions and Cloud Logging Query Language validation (#80, #248).
+* **Bug Fixes & Improvements:**
+  * Fix the query editor resetting a saved project to the default project when the project is not in the first 100 results of the project list; the editor now checks whether the project exists before resetting it (#240).
+  * Surface `ListLogs` pagination and syntax errors instead of silently returning empty or truncated results, and fix a `QueryEditor` bucket-fetch race (#249).
+  * Respect explicit `Default Project ID` when using GCE / local Application Default Credentials (ADC) authentication (#44, #246).
+  * Fix nil-pointer panic in `Dispose()` when using OAuth passthrough authentication (#250).
+  * Eliminate React prop mutations and stale component state in `ConfigEditor` (#137, #245).
+* **Dependencies:**
+  * Update OpenTelemetry Go modules (`go.opentelemetry.io/otel/sdk` to v1.47.0, `otlptrace`/`otlptracegrpc` to v1.45.0) and frontend transitive dependencies (`brace-expansion`, `fast-uri`, `postcss-selector-parser`, `qs`, `source-map-js`) (#235, #236, #237, #238, #241, #243, #244).
+* **Upgrade Notes:**
+  * **GCE / ADC Default Project (#246):** Existing GCE datasources that have a leftover `Default Project ID` saved in `jsonData` (for example, datasources previously switched from JWT to GCE) will now use that explicit `Default Project ID` for new queries, resets, and projectless trace links instead of the GCE metadata project. Clear `Default Project ID` in the datasource settings if you want GCE metadata detection.
+  * **Query Error Surfacing (#249):** Errors during `ListLogs` pagination (such as quota exhaustion or invalid filter syntax) now fail the query visibly instead of silently returning partial or empty results.
 
 ## 1.8.1 (2026-09-12)
 * Address security findings from the Grafana plugin review of v1.8.0:

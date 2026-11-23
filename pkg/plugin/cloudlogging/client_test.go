@@ -16,7 +16,15 @@ package cloudlogging
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/json"
+	"encoding/pem"
+	"errors"
 	"net"
+	"net/http"
+	"strings"
 	"testing"
 
 	logging "cloud.google.com/go/logging/apiv2"
@@ -224,4 +232,40 @@ func TestClient_ProjectExists(t *testing.T) {
 			require.Equal(t, tc.want, exists)
 		})
 	}
+}
+
+type failingRoundTripper struct {
+	called bool
+}
+
+func (f *failingRoundTripper) RoundTrip(*http.Request) (*http.Response, error) {
+	f.called = true
+	return nil, errors.New("unexpected network call to token_uri")
+}
+
+func TestProxyAuthCreds_UseSelfSignedJWT(t *testing.T) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	require.NoError(t, err)
+	privDER, err := x509.MarshalPKCS8PrivateKey(key)
+	require.NoError(t, err)
+	privPEM := string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: privDER}))
+
+	saJSON, err := json.Marshal(map[string]string{
+		"type":         "service_account",
+		"project_id":   "pdc-project",
+		"private_key":  privPEM,
+		"client_email": "sa@pdc-project.iam.gserviceaccount.com",
+		"token_uri":    "http://127.0.0.1:1/never-called",
+	})
+	require.NoError(t, err)
+
+	rt := &failingRoundTripper{}
+	httpClient := &http.Client{Transport: rt}
+	creds, err := proxyAuthCreds(saJSON, "", httpClient, defaultAuthScopes, true)
+	require.NoError(t, err)
+
+	tok, err := creds.Token(context.Background())
+	require.NoError(t, err)
+	require.False(t, rt.called, "self-signed JWT must not make network calls to token_uri")
+	require.Equal(t, 3, len(strings.Split(tok.Value, ".")), "expected a 3-segment self-signed JWT")
 }

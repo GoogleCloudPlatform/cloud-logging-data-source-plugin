@@ -99,11 +99,12 @@ func proxyGRPCOpts(proxyCfg *ProxyConfig) []option.ClientOption {
 	return []option.ClientOption{option.WithGRPCDialOption(proxyCfg.GRPCDialOption)}
 }
 
-func proxyAuthCreds(jsonCreds []byte, universeDomain string, httpClient *http.Client, scopes []string) (*auth.Credentials, error) {
+func proxyAuthCreds(jsonCreds []byte, universeDomain string, httpClient *http.Client, scopes []string, useSelfSignedJWT bool) (*auth.Credentials, error) {
 	detectOpts := &credentials.DetectOptions{
-		Scopes:         scopes,
-		Client:         httpClient,
-		UniverseDomain: universeDomain,
+		Scopes:           scopes,
+		Client:           httpClient,
+		UniverseDomain:   universeDomain,
+		UseSelfSignedJWT: useSelfSignedJWT,
 	}
 	if jsonCreds != nil {
 		return credentials.NewCredentialsFromJSON(credentials.ServiceAccount, jsonCreds, detectOpts)
@@ -143,7 +144,9 @@ func NewClient(ctx context.Context, jsonCreds []byte, universeDomain string, pro
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}
 	if proxyCfg != nil && proxyCfg.HTTPClient != nil {
-		creds, err := proxyAuthCreds(jsonCreds, universeDomain, proxyCfg.HTTPClient, defaultAuthScopes)
+		// Use self-signed JWTs (matching direct EnableJwtWithScope behavior) so
+		// direct JWT+PDC avoids an extra 2LO round-trip to oauth2.googleapis.com.
+		creds, err := proxyAuthCreds(jsonCreds, universeDomain, proxyCfg.HTTPClient, defaultAuthScopes, true)
 		if err != nil {
 			return nil, err
 		}
@@ -163,7 +166,7 @@ func NewClientWithGCE(ctx context.Context, universeDomain string, proxyCfg *Prox
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}
 	if proxyCfg != nil && proxyCfg.HTTPClient != nil {
-		creds, err := proxyAuthCreds(nil, universeDomain, proxyCfg.HTTPClient, defaultAuthScopes)
+		creds, err := proxyAuthCreds(nil, universeDomain, proxyCfg.HTTPClient, defaultAuthScopes, false)
 		if err != nil {
 			return nil, err
 		}
@@ -182,7 +185,7 @@ func NewImpersonationTokenSource(ctx context.Context, jsonCreds []byte, imperson
 	impersonateOpts := append([]option.ClientOption{}, universeDomainOpts(universeDomain)...)
 
 	if proxyCfg != nil && proxyCfg.HTTPClient != nil {
-		baseCreds, credErr := proxyAuthCreds(jsonCreds, universeDomain, proxyCfg.HTTPClient, []string{"https://www.googleapis.com/auth/cloud-platform"})
+		baseCreds, credErr := proxyAuthCreds(jsonCreds, universeDomain, proxyCfg.HTTPClient, []string{"https://www.googleapis.com/auth/cloud-platform"}, false)
 		if credErr != nil {
 			return nil, credErr
 		}

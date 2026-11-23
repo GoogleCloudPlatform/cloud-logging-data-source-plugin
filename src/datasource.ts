@@ -691,16 +691,35 @@ function formatAdHocFilters(filters?: AdHocVariableFilter[]): string {
 }
 
 function formatAdHocFilter(filter: AdHocVariableFilter): string | null {
-  // Ignore Grafana's internal groupBy tokens and incomplete in-progress UI filters.
+  // Ignore Grafana's internal groupBy tokens.
   if (filter.operator === 'groupBy') {
     return null;
   }
   const rawKey = filter.key?.trim();
-  if (!rawKey || !filter.value) {
+  if (!rawKey) {
+    return null;
+  }
+  const ext = filter as AdHocVariableFilter & { values?: string[]; valueLabels?: string[] };
+  const values = Array.isArray(ext.values) ? ext.values : undefined;
+  const valueLabels = Array.isArray(ext.valueLabels) ? ext.valueLabels : undefined;
+  const hasMultipleValues = Boolean(
+    (values && values.length > 1) || (valueLabels && valueLabels.length > 1)
+  );
+  const hasNonEmptyValueLabel = Boolean(valueLabels && valueLabels.some((v) => Boolean(v)));
+  const effectiveValue = filter.value || (values && values.length === 1 ? values[0] : '');
+
+  // Ignore incomplete in-progress single-value UI picks before a value is selected.
+  if (!effectiveValue && !hasMultipleValues && !hasNonEmptyValueLabel) {
     return null;
   }
   if (!SUPPORTED_ADHOC_OPERATORS.has(filter.operator)) {
     throw new Error(`Unsupported Ad Hoc filter operator "${filter.operator}" for key "${rawKey}"`);
+  }
+  if (hasMultipleValues) {
+    throw new Error(`Multi-value Ad Hoc filters are not supported for key "${rawKey}"`);
+  }
+  if (!effectiveValue) {
+    throw new Error(`Invalid Ad Hoc filter value for key "${rawKey}"`);
   }
   if (LQL_RESERVED_KEYWORDS.has(rawKey.toUpperCase()) || !LQL_FIELD_PATH_RE.test(rawKey)) {
     throw new Error(
@@ -708,7 +727,7 @@ function formatAdHocFilter(filter: AdHocVariableFilter): string | null {
     );
   }
   const key = rawKey === 'id' ? 'insertId' : rawKey === 'level' ? 'severity' : rawKey;
-  return `${key}${filter.operator}"${escapeLabelValue(filter.value)}"`;
+  return `${key}${filter.operator}"${escapeLabelValue(effectiveValue)}"`;
 }
 
 // the 4 symbols we handle are:
