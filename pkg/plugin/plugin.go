@@ -163,8 +163,16 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		return nil, fmt.Errorf("create client: %s", msg)
 	}
 
+	// Avoid boxing a typed-nil *cloudlogging.Client into the cloudlogging.API
+	// interface (e.g. under oauthPassthrough), which would make d.client != nil
+	// true and panic in Dispose() when calling d.client.Close().
+	var apiClient cloudlogging.API
+	if client != nil {
+		apiClient = client
+	}
+
 	return &CloudLoggingDatasource{
-		client:           client,
+		client:           apiClient,
 		oauthPassThrough: oauthPassThrough,
 		universeDomain:   conf.UniverseDomain,
 	}, nil
