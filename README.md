@@ -193,6 +193,10 @@ The plugin currently supports variables for logging scopes. For example, you can
 Below is an example of defining a variable for log views.
 ![define a variable](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/src/img/template_query_vars.png?raw=true)
 
+#### Ad hoc filters
+
+You can also add an **Ad hoc filters** dashboard variable targeting a Google Cloud Logging data source (or click the **Filter for value** / **Filter out value** buttons in a dashboard Logs panel). Active filters are appended to every panel query using Cloud Logging query syntax (supporting `=`, `!=`, `=~`, `!~`, `<`, `>`, `<=`, and `>=`; multi-value operators such as `=|` are not supported). Filter key suggestions include standard Cloud Logging fields as well as label keys and values observed from recent query results, and custom field paths can be entered directly (quote segments containing special characters such as `/`, for example `labels."k8s-pod/app"`).
+
 ### Alerting
 
 [Grafana Alerting](https://grafana.com/docs/grafana/latest/alerting/fundamentals/data-source-alerting/) is not directly supported due to how [Logging Query Language](https://cloud.google.com/logging/docs/view/logging-query-language) works on Google Cloud. If you need to create alerts based on logs, consider using [Log-based metrics](https://cloud.google.com/logging/docs/logs-based-metrics) and a [Cloud Monitoring data source](https://grafana.com/docs/grafana/latest/datasources/google-cloud-monitoring/).

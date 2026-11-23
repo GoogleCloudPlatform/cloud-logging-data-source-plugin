@@ -15,24 +15,78 @@
  */
 
 import {
+  AdHocVariableFilter,
   DataFrame,
   DataQueryRequest,
   DataQueryResponse,
   DataSourceInstanceSettings,
   Field,
   FieldType,
+  MetricFindValue,
   QueryFixAction,
   ScopedVars,
 } from '@grafana/data';
 import { DataSourceWithBackend, getBackendSrv, getDataSourceSrv, getTemplateSrv, TemplateSrv } from '@grafana/runtime';
 import { from, lastValueFrom, Observable } from 'rxjs';
-import { map, mergeMap } from 'rxjs/operators';
+import { map, mergeMap, tap } from 'rxjs/operators';
 import { CloudLoggingOptions, Query } from './types';
 import { CloudLoggingVariableSupport } from './variables';
+
+const DEFAULT_TAG_KEYS: readonly string[] = [
+  'severity',
+  'resource.type',
+  'logName',
+  'insertId',
+  'trace',
+  'spanId',
+  'httpRequest.requestMethod',
+  'httpRequest.status',
+  'httpRequest.requestUrl',
+  'httpRequest.userAgent',
+  'httpRequest.remoteIp',
+  'resource.labels.project_id',
+  'resource.labels.location',
+  'resource.labels.zone',
+  'resource.labels.cluster_name',
+  'resource.labels.namespace_name',
+  'resource.labels.pod_name',
+  'resource.labels.container_name',
+  'resource.labels.service_name',
+  'resource.labels.revision_name',
+  'resource.labels.configuration_name',
+  'resource.labels.instance_id',
+  'resource.labels.function_name',
+];
+
+const CLOUD_LOGGING_SEVERITIES: readonly string[] = [
+  'DEFAULT',
+  'DEBUG',
+  'INFO',
+  'NOTICE',
+  'WARNING',
+  'ERROR',
+  'CRITICAL',
+  'ALERT',
+  'EMERGENCY',
+];
+
+const SUPPORTED_ADHOC_OPERATORS = new Set(['=', '!=', '=~', '!~', '<', '>', '<=', '>=']);
+// Cloud Logging Query Language field path: dot-separated identifiers or
+// double-quoted segments (e.g. `labels."k8s-pod/app"`). Prevents whitespace,
+// parentheses, or `OR` filter-bypass injection via filter keys.
+const LQL_FIELD_PATH_RE =
+  /^[a-zA-Z_][a-zA-Z0-9_-]*(?:\.(?:[a-zA-Z_][a-zA-Z0-9_-]*|"(?:[^"\\\r\n]|\\.)+"))*$/;
+const LQL_RESERVED_KEYWORDS = new Set(['AND', 'OR', 'NOT']);
+const MAX_OBSERVED_KEYS = 200;
+const MAX_OBSERVED_VALUES_PER_KEY = 50;
+const MAX_OBSERVED_VALUE_LENGTH = 200;
+const MAX_OBSERVED_ROWS_PER_FRAME = 200;
+const EXCLUDED_OBSERVED_VALUE_KEYS = new Set(['textPayload', 'trace', 'spanId']);
 
 export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions> {
   authenticationType: string;
   annotations = {};
+  private observedLabels = new Map<string, Set<string>>();
 
   constructor(
     private instanceSettings: DataSourceInstanceSettings<CloudLoggingOptions>,
@@ -316,10 +370,17 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
       this.instanceSettings.jsonData.authenticationType === 'gce' && (needsDefaultProjectForRequest || !!traceDs)
         ? this.ensureGCEDefaultProject().catch(() => {})
         : undefined;
-    const base =
+    const base = (
       gceWarmup && needsDefaultProjectForRequest
         ? from(gceWarmup).pipe(mergeMap(() => super.query(request)))
-        : super.query(request);
+        : super.query(request)
+    ).pipe(
+      tap((response) => {
+        for (const frame of response?.data ?? []) {
+          this.recordObservedLabels(frame);
+        }
+      })
+    );
     if (!traceDs) {
       return base;
     }
@@ -440,11 +501,131 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
     return frame;
   }
 
-  applyTemplateVariables(query: Query, scopedVars: ScopedVars): Query {
+  /**
+   * Cache label keys and values observed in query responses (bounded LRU) so
+   * Ad Hoc filter dropdowns can suggest fields and values seen in recent logs.
+   */
+  private recordObservedLabels(frame: DataFrame): void {
+    if (!frame?.fields) {
+      return;
+    }
+    const labelsField = frame.fields.find((f) => f.name === 'labels');
+    if (!labelsField) {
+      return;
+    }
+    const rows = fieldValues<Record<string, unknown> | null | undefined>(labelsField);
+    const rowLimit = Math.min(rows.length, MAX_OBSERVED_ROWS_PER_FRAME);
+    for (let i = 0; i < rowLimit; i++) {
+      const row = rows[i];
+      if (!row || typeof row !== 'object') {
+        continue;
+      }
+      for (const [key, rawValue] of Object.entries(row)) {
+        if (!key || LQL_RESERVED_KEYWORDS.has(key.toUpperCase()) || !LQL_FIELD_PATH_RE.test(key)) {
+          continue;
+        }
+        let values = this.observedLabels.get(key);
+        if (values) {
+          // Refresh LRU recency for this key.
+          this.observedLabels.delete(key);
+          this.observedLabels.set(key, values);
+        } else {
+          if (this.observedLabels.size >= MAX_OBSERVED_KEYS) {
+            const oldestKey = this.observedLabels.keys().next().value;
+            if (oldestKey !== undefined) {
+              this.observedLabels.delete(oldestKey);
+            }
+          }
+          values = new Set<string>();
+          this.observedLabels.set(key, values);
+        }
+        if (EXCLUDED_OBSERVED_VALUE_KEYS.has(key)) {
+          continue;
+        }
+        if (
+          typeof rawValue === 'string' &&
+          rawValue.length > 0 &&
+          rawValue.length <= MAX_OBSERVED_VALUE_LENGTH &&
+          !/[\r\n]/.test(rawValue)
+        ) {
+          if (values.has(rawValue)) {
+            values.delete(rawValue);
+            values.add(rawValue);
+          } else {
+            if (values.size >= MAX_OBSERVED_VALUES_PER_KEY) {
+              const oldestVal = values.values().next().value;
+              if (oldestVal !== undefined) {
+                values.delete(oldestVal);
+              }
+            }
+            values.add(rawValue);
+          }
+        }
+      }
+    }
+  }
+
+  /**
+   * Return available filter keys for Grafana Ad Hoc filter variables:
+   * standard Cloud Logging fields plus any label keys observed in query results.
+   */
+  async getTagKeys(): Promise<MetricFindValue[]> {
+    const keys = new Set<string>(DEFAULT_TAG_KEYS);
+    for (const key of Array.from(this.observedLabels.keys()).sort()) {
+      keys.add(key);
+    }
+    return Array.from(keys).map((text) => ({ text }));
+  }
+
+  /**
+   * Return suggested values for a given Ad Hoc filter key.
+   */
+  async getTagValues(options?: { key?: string }): Promise<MetricFindValue[]> {
+    const key = options?.key;
+    if (!key) {
+      return [];
+    }
+    if (key === 'severity' || key === 'level') {
+      return CLOUD_LOGGING_SEVERITIES.map((text) => ({ text }));
+    }
+    const values = this.observedLabels.get(key);
+    if (!values) {
+      return [];
+    }
+    return Array.from(values)
+      .sort()
+      .map((text) => ({ text }));
+  }
+
+  interpolateVariablesInQueries(
+    queries: Query[],
+    scopedVars: ScopedVars,
+    filters?: AdHocVariableFilter[]
+  ): Query[] {
+    return queries.map((q) => this.applyTemplateVariables(q, scopedVars, filters));
+  }
+
+  applyTemplateVariables(query: Query, scopedVars: ScopedVars, filters?: AdHocVariableFilter[]): Query {
+    const queryText = this.templateSrv.replace(query.queryText, scopedVars);
+    const legacyQuery = this.templateSrv.replace(query.query, scopedVars);
+    const adHocClauses = formatAdHocFilters(filters);
+
+    let finalQueryText = queryText;
+    let finalLegacyQuery = legacyQuery;
+    if (adHocClauses) {
+      if ((queryText ?? '').trim()) {
+        finalQueryText = `${queryText.trimEnd()}\n${adHocClauses}`;
+      } else if ((legacyQuery ?? '').trim()) {
+        finalLegacyQuery = `${legacyQuery.trimEnd()}\n${adHocClauses}`;
+      } else {
+        finalQueryText = adHocClauses;
+      }
+    }
+
     return {
       ...query,
-      queryText: this.templateSrv.replace(query.queryText, scopedVars),
-      query: this.templateSrv.replace(query.query, scopedVars),
+      queryText: finalQueryText,
+      query: finalLegacyQuery,
       // Trace-to-logs span links built by Grafana core carry only a `query`
       // string and no project; fall back to the default project so the
       // backend doesn't request the invalid resource "projects/". The
@@ -495,12 +676,48 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   }
 }
 
-// the 3 symbols we handle are:
-// - \n ... the newline character
+function formatAdHocFilters(filters?: AdHocVariableFilter[]): string {
+  if (!filters || filters.length === 0) {
+    return '';
+  }
+  const clauses: string[] = [];
+  for (const filter of filters) {
+    const clause = formatAdHocFilter(filter);
+    if (clause) {
+      clauses.push(clause);
+    }
+  }
+  return clauses.join('\n');
+}
+
+function formatAdHocFilter(filter: AdHocVariableFilter): string | null {
+  // Ignore Grafana's internal groupBy tokens and incomplete in-progress UI filters.
+  if (filter.operator === 'groupBy') {
+    return null;
+  }
+  const rawKey = filter.key?.trim();
+  if (!rawKey || !filter.value) {
+    return null;
+  }
+  if (!SUPPORTED_ADHOC_OPERATORS.has(filter.operator)) {
+    throw new Error(`Unsupported Ad Hoc filter operator "${filter.operator}" for key "${rawKey}"`);
+  }
+  if (LQL_RESERVED_KEYWORDS.has(rawKey.toUpperCase()) || !LQL_FIELD_PATH_RE.test(rawKey)) {
+    throw new Error(
+      `Invalid Ad Hoc filter key "${rawKey}": expected a Cloud Logging field path (quote segments containing special characters, e.g. labels."k8s-pod/app")`
+    );
+  }
+  const key = rawKey === 'id' ? 'insertId' : rawKey === 'level' ? 'severity' : rawKey;
+  return `${key}${filter.operator}"${escapeLabelValue(filter.value)}"`;
+}
+
+// the 4 symbols we handle are:
 // - \  ... the backslash character
+// - \r ... the carriage return character
+// - \n ... the newline character
 // - "  ... the double-quote character
 function escapeLabelValue(labelValue: string): string {
-  return labelValue.replace(/\\/g, '\\\\').replace(/\n/g, '\\n').replace(/"/g, '\\"');
+  return labelValue.replace(/\\/g, '\\\\').replace(/\r/g, '\\r').replace(/\n/g, '\\n').replace(/"/g, '\\"');
 }
 
 /**
