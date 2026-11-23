@@ -402,7 +402,7 @@ func (c *Client) ListLogs(ctx context.Context, q *Query) ([]*loggingpb.LogEntry,
 		}
 		if err != nil {
 			log.DefaultLogger.Error("error getting page", "error", err)
-			break
+			return nil, err
 		}
 
 		entries = append(entries, resp)
