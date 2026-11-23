@@ -27,7 +27,7 @@ export interface DataSourceSecureJsonData extends BaseDataSourceSecureJsonData {
 
 export const authTypes: Array<SelectableValue<string>> = [
   { label: 'Google JWT File', value: GoogleAuthType.JWT },
-  { label: 'GCE Default Service Account', value: GoogleAuthType.GCE },
+  { label: 'GCE Default Service Account / ADC', value: GoogleAuthType.GCE },
   { label: 'Access Token', value: 'accessToken' },
   { label: 'OAuth Passthrough', value: 'oauthPassthrough' },
 ];
