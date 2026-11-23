@@ -755,3 +755,37 @@ func TestCallResource_ProjectExists_MissingProjectId(t *testing.T) {
 	require.Equal(t, 400, sender.resp.Status)
 	require.Contains(t, string(sender.resp.Body), "ProjectId")
 }
+
+func TestCallResource_ProjectExists_NotFound(t *testing.T) {
+	client := mocks.NewAPI(t)
+	client.On("ProjectExists", mock.Anything, "missing-project").Return(false, nil)
+	ds := &CloudLoggingDatasource{client: client}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "projectExists",
+		URL:  "projectExists?ProjectId=missing-project",
+	}, sender)
+
+	require.NoError(t, err)
+	require.Equal(t, 200, sender.resp.Status)
+	require.Equal(t, "false", string(sender.resp.Body))
+	client.AssertExpectations(t)
+}
+
+func TestCallResource_ProjectExists_Error(t *testing.T) {
+	client := mocks.NewAPI(t)
+	client.On("ProjectExists", mock.Anything, "my-project").Return(false, errors.New("backend unavailable"))
+	ds := &CloudLoggingDatasource{client: client}
+
+	sender := &responseSender{}
+	err := ds.CallResource(context.Background(), &backend.CallResourceRequest{
+		Path: "projectExists",
+		URL:  "projectExists?ProjectId=my-project",
+	}, sender)
+
+	require.NoError(t, err)
+	require.Equal(t, 502, sender.resp.Status)
+	require.Contains(t, string(sender.resp.Body), "backend unavailable")
+	client.AssertExpectations(t)
+}

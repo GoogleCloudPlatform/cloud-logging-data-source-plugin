@@ -15,7 +15,7 @@
  */
 
 import React from 'react';
-import { render, waitFor } from '@testing-library/react';
+import { act, render, waitFor } from '@testing-library/react';
 import { LoggingQueryEditor } from './QueryEditor';
 import { DataSource } from './datasource';
 import { Query } from './types';
@@ -76,13 +76,57 @@ describe('LoggingQueryEditor project initialization', () => {
         const onChange = renderEditor(ds, 'saved-project');
 
         await waitFor(() => expect(onChange).toHaveBeenCalledWith(resetToDefault));
+        expect(ds.getFilteredBuckets).not.toHaveBeenCalledWith('saved-project');
     });
 
-    it('resets a saved project when the existence check fails', async () => {
+    it('waits for projectExists before fetching buckets and skips buckets when rejected', async () => {
+        let resolveExists!: (exists: boolean) => void;
+        const existsPromise = new Promise<boolean>((resolve) => {
+            resolveExists = resolve;
+        });
+        const ds = makeDataSource({ projectExists: jest.fn().mockReturnValue(existsPromise) });
+        const onChange = jest.fn();
+        const baseQuery = { refId: 'A', queryText: 'severity>=DEFAULT', projectId: 'saved-project', bucketId: '', viewId: '' } as Query;
+        const { rerender } = render(
+            <LoggingQueryEditor
+                datasource={ds as unknown as DataSource}
+                query={baseQuery}
+                onChange={onChange}
+                onRunQuery={jest.fn()}
+            />
+        );
+
+        await waitFor(() => expect(ds.projectExists).toHaveBeenCalledWith('saved-project'));
+        // Even though getFilteredProjects has already resolved, buckets must not be fetched yet.
+        expect(ds.getFilteredBuckets).not.toHaveBeenCalled();
+
+        await act(async () => {
+            resolveExists(false);
+            await existsPromise;
+        });
+
+        await waitFor(() => expect(onChange).toHaveBeenCalledWith(resetToDefault));
+        expect(ds.getFilteredBuckets).not.toHaveBeenCalledWith('saved-project');
+
+        // Once the parent applies the reset projectId, buckets load for the replacement project.
+        rerender(
+            <LoggingQueryEditor
+                datasource={ds as unknown as DataSource}
+                query={{ ...baseQuery, projectId: 'default-project' }}
+                onChange={onChange}
+                onRunQuery={jest.fn()}
+            />
+        );
+        await waitFor(() => expect(ds.getFilteredBuckets).toHaveBeenCalledWith('default-project'));
+    });
+
+    it('keeps a saved project when the existence check fails with a transient error', async () => {
         const ds = makeDataSource({ projectExists: jest.fn().mockRejectedValue(new Error('boom')) });
         const onChange = renderEditor(ds, 'saved-project');
 
-        await waitFor(() => expect(onChange).toHaveBeenCalledWith(resetToDefault));
+        await waitFor(() => expect(ds.projectExists).toHaveBeenCalledWith('saved-project'));
+        await waitFor(() => expect(ds.getFilteredBuckets).toHaveBeenCalledWith('saved-project'));
+        expect(onChange).not.toHaveBeenCalledWith(resetToDefault);
     });
 
     it('keeps a listed project without an existence check', async () => {

@@ -53,12 +53,21 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
   // Compute normalized queryText as a derived value (never mutate the prop directly)
   const effectiveQueryText = query.query ?? query.queryText ?? defaultQuery.queryText;
 
+  // Tracks completion of project validation for the current datasource so the
+  // bucket-loading effect waits for validation (including any async
+  // projectExists check) and never loads buckets for a rejected stale project.
+  const [projectValidationState, setProjectValidationState] = useState<{
+    uid: string | null;
+    rejectedProjectId: string | null;
+  }>({ uid: null, rejectedProjectId: null });
+
   // Initialization effect: validates the carried-over project against the
   // datasource's actual filtered project list. The list is the source of truth;
   // the regex filter alone is insufficient because "no filter" passes everything,
   // so a stale projectId from a different datasource would slip through.
   useEffect(() => {
     let cancelled = false;
+    const validatingForUid = datasource.uid;
 
     const computeTextUpdates = (q: Query): Partial<Query> => {
       const norm: Partial<Query> = {};
@@ -80,6 +89,10 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       if (currentProjectId && currentProjectId.startsWith('$')) {
         if (!cancelled && Object.keys(textUpdates).length > 0) {
           onChangeRef.current({ ...latestQuery, ...textUpdates });
+        }
+        await Promise.resolve();
+        if (!cancelled) {
+          setProjectValidationState({ uid: validatingForUid, rejectedProjectId: null });
         }
         return;
       }
@@ -110,7 +123,9 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
           try {
             isValid = await datasource.projectExists(currentProjectId);
           } catch {
-            isValid = false;
+            // Transient API error — assume valid so we don't reset a saved
+            // project on a flaky network (consistent with getFilteredProjects above).
+            isValid = true;
           }
           if (cancelled) { return; }
         }
@@ -125,6 +140,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
         if (Object.keys(updates).length > 0) {
           onChangeRef.current({ ...latestQuery, ...updates });
         }
+        setProjectValidationState({ uid: validatingForUid, rejectedProjectId: null });
         return;
       }
 
@@ -149,6 +165,10 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
 
       if (cancelled) { return; }
       onChangeRef.current({ ...latestQuery, ...textUpdates, projectId: newProjectId, bucketId: '', viewId: '' });
+      setProjectValidationState({
+        uid: validatingForUid,
+        rejectedProjectId: currentProjectId && currentProjectId !== newProjectId ? currentProjectId : null,
+      });
       if (newProjectId) {
         onRunQueryRef.current();
       }
@@ -254,10 +274,14 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
     }, 300);
   }, [datasource]);
 
+  const projectValidated =
+    projectValidationState.uid === datasource.uid &&
+    (!projectValidationState.rejectedProjectId || query.projectId !== projectValidationState.rejectedProjectId);
+
   const [buckets, setBuckets] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
     if (!query.projectId || query.projectId.startsWith('$')) { return; }
-    if (projectsLoading) { return; }
+    if (!projectValidated) { return; }
     if (datasource.filterProjects([query.projectId]).length === 0) { return; }
     let cancelled = false;
     datasource.getFilteredBuckets(query.projectId).then(res => {
@@ -271,7 +295,7 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
       if (!cancelled) { setFetchError(sanitizeFetchError(err)); }
     });
     return () => { cancelled = true; };
-  }, [datasource, query.projectId, projectsLoading]);
+  }, [datasource, query.projectId, projectValidated]);
 
   const [views, setViews] = useState<Array<SelectableValue<string>>>();
   useEffect(() => {
@@ -357,12 +381,17 @@ export function LoggingQueryEditor({ datasource, query, range, onChange, onRunQu
             width={30}
             allowCustomValue
             formatCreateLabel={(v) => `Use project: ${v}`}
-            onChange={e => onChange({
-              ...query,
-              projectId: e.value!,
-              bucketId: query.bucketId && query.bucketId.startsWith('$') ? query.bucketId : "",
-              viewId: query.viewId && query.viewId.startsWith('$') ? query.viewId : "",
-            })}
+            onChange={e => {
+              setProjectValidationState(prev =>
+                prev.rejectedProjectId ? { ...prev, rejectedProjectId: null } : prev
+              );
+              onChange({
+                ...query,
+                projectId: e.value!,
+                bucketId: query.bucketId && query.bucketId.startsWith('$') ? query.bucketId : "",
+                viewId: query.viewId && query.viewId.startsWith('$') ? query.viewId : "",
+              });
+            }}
             options={projectsForCurrentDs}
             isLoading={projectsLoading}
             onInputChange={onProjectSearchChange}
