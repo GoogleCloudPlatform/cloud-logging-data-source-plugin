@@ -10,7 +10,8 @@
   * Fix nil-pointer panic in `Dispose()` when using OAuth passthrough authentication (#250).
   * Eliminate React prop mutations and stale component state in `ConfigEditor` (#137, #245).
 * **Dependencies:**
-  * Update OpenTelemetry Go modules (`go.opentelemetry.io/otel/sdk` to v1.47.0, `otlptrace`/`otlptracegrpc` to v1.45.0) and frontend transitive dependencies (`brace-expansion`, `fast-uri`, `postcss-selector-parser`, `qs`, `source-map-js`) (#235, #236, #237, #238, #241, #243, #244).
+  * Upgrade Grafana Go plugin SDK (`github.com/grafana/grafana-plugin-sdk-go` to `v0.302.0`, `grafana-google-sdk-go` to `v0.4.3`), build with Go `1.27.4`, and update Go security dependencies (`github.com/klauspost/compress` to `v1.20.5`, `golang.org/x/net` to `v0.63.0`, `golang.org/x/crypto` to `v0.59.0`) and OpenTelemetry Go modules (`go.opentelemetry.io/otel/sdk` to `v1.47.0`, `otlptrace`/`otlptracegrpc` to `v1.47.0`).
+  * Update frontend transitive dependencies (`zod` to `^4.6.7` for CVE-2023-54404, plus `brace-expansion`, `fast-uri`, `postcss-selector-parser`, `qs`, `source-map-js`) (#235, #236, #237, #238, #241, #243, #244).
 * **Upgrade Notes:**
   * **GCE / ADC Default Project (#246):** Existing GCE datasources that have a leftover `Default Project ID` saved in `jsonData` (for example, datasources previously switched from JWT to GCE) will now use that explicit `Default Project ID` for new queries, resets, and projectless trace links instead of the GCE metadata project. Clear `Default Project ID` in the datasource settings if you want GCE metadata detection.
   * **Query Error Surfacing (#249):** Errors during `ListLogs` pagination (such as quota exhaustion or invalid filter syntax) now fail the query visibly instead of silently returning partial or empty results.
