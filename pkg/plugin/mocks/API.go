@@ -91,6 +91,27 @@ func (_m *API) ListProjects(_a0 context.Context, query string) ([]string, error)
 	return r0, r1
 }
 
+// ProjectExists provides a mock function with given fields: ctx, projectID
+func (_m *API) ProjectExists(ctx context.Context, projectID string) (bool, error) {
+	ret := _m.Called(ctx, projectID)
+
+	var r0 bool
+	if rf, ok := ret.Get(0).(func(context.Context, string) bool); ok {
+		r0 = rf(ctx, projectID)
+	} else {
+		r0 = ret.Get(0).(bool)
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = rf(ctx, projectID)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // ListProjectBuckets provides a mock function with given fields: ctx, projectID
 func (_m *API) ListProjectBuckets(ctx context.Context, projectID string) ([]string, error) {
 	ret := _m.Called(ctx, projectID)

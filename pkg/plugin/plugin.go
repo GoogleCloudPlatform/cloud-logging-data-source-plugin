@@ -229,6 +229,7 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 	// Right now we only support calls to the following:
 	//`/gceDefaultProject`
 	//`/projects`
+	//`/projectExists`
 	//`/logBuckets`
 	//`/logViews`
 	resource := strings.ToLower(req.Path)
@@ -269,6 +270,38 @@ func (d *CloudLoggingDatasource) CallResource(ctx context.Context, req *backend.
 		}
 
 		body, err = json.Marshal(projects)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusInternalServerError,
+				Body:   jsonErrorBody("Unable to create response"),
+			})
+		}
+	} else if resource == "projectexists" {
+		reqUrl, err := url.Parse(req.URL)
+		if err != nil {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   jsonErrorBody("Invalid request URL"),
+			})
+		}
+		projectID := reqUrl.Query().Get("ProjectId")
+		if projectID == "" {
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadRequest,
+				Body:   jsonErrorBody("Missing required parameter: ProjectId"),
+			})
+		}
+
+		exists, err := client.ProjectExists(ctx, projectID)
+		if err != nil {
+			log.DefaultLogger.Error("problem checking project", "error", err)
+			return sender.Send(&backend.CallResourceResponse{
+				Status: http.StatusBadGateway,
+				Body:   jsonErrorBody(sanitizeErrorMessage(err)),
+			})
+		}
+
+		body, err = json.Marshal(exists)
 		if err != nil {
 			return sender.Send(&backend.CallResourceResponse{
 				Status: http.StatusInternalServerError,

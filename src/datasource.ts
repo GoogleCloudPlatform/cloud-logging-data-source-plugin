@@ -155,6 +155,13 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   }
 
   /**
+   * Check that a project exists, independent of the capped project list.
+   */
+  projectExists(projectId: string): Promise<boolean> {
+    return this.getResource('projectExists', { ProjectId: projectId });
+  }
+
+  /**
    * Filter a list of project IDs against the configured project list filter patterns.
    * Each non-empty line in `projectListFilter` is treated as a regex pattern
    * anchored to the full project ID (^pattern$).

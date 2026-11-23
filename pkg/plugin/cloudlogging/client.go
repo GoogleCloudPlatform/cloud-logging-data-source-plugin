@@ -30,6 +30,8 @@ import (
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	// Currently, LogEntry.ProtoPayload only supports two types
 	// https://pkg.go.dev/cloud.google.com/go/logging/apiv2/loggingpb#LogEntry_ProtoPayload
@@ -51,6 +53,8 @@ type API interface {
 	// ListProjects returns the project IDs of all visible projects.
 	// If query is non-empty it is forwarded to the Resource Manager search filter.
 	ListProjects(ctx context.Context, query string) ([]string, error)
+	// ProjectExists reports whether the project exists and is active
+	ProjectExists(ctx context.Context, projectID string) (bool, error)
 	// ListProjectBuckets returns all log buckets of a project
 	ListProjectBuckets(ctx context.Context, projectId string) ([]string, error)
 	// ListProjectBucketViews returns all views of a log bucket
@@ -254,6 +258,20 @@ func (c *Client) ListProjects(ctx context.Context, query string) ([]string, erro
 		}
 	}
 	return projectIDs, nil
+}
+
+// ProjectExists reports whether the project exists and is active.
+// Resource Manager returns PermissionDenied for unknown projects, so it is treated as not found.
+func (c *Client) ProjectExists(ctx context.Context, projectID string) (bool, error) {
+	project, err := c.rClient.GetProject(ctx, &resourcemanagerpb.GetProjectRequest{Name: "projects/" + projectID})
+	if err != nil {
+		switch status.Code(err) {
+		case codes.NotFound, codes.PermissionDenied, codes.InvalidArgument:
+			return false, nil
+		}
+		return false, err
+	}
+	return project.State == resourcemanagerpb.Project_ACTIVE, nil
 }
 
 // ListProjectBucketsViews returns all views of a log bucket
