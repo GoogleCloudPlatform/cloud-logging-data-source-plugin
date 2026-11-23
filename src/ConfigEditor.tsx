@@ -24,26 +24,19 @@ import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData, LogsToTracesO
 export type Props = DataSourcePluginOptionsEditorProps<CloudLoggingOptions, DataSourceSecureJsonData>;
 
 export class ConfigEditor extends PureComponent<Props> {
-  state = {
-    isChecked: this.props.options.jsonData.usingImpersonation || false,
-    sa: this.props.options.jsonData.serviceAccountToImpersonate || '',
-  };
-
   render() {
     const { options, onOptionsChange } = this.props;
     const secureJsonData = options.secureJsonData || {};
+    const usingImpersonation = Boolean(options.jsonData.usingImpersonation);
+    const serviceAccountToImpersonate = options.jsonData.serviceAccountToImpersonate || '';
 
-    const handleClick = () => {
-      const newImpersonationState = !this.state.isChecked;
+    const handleImpersonationToggle = () => {
       onOptionsChange({
         ...options,
         jsonData: {
           ...options.jsonData,
-          usingImpersonation: newImpersonationState,
+          usingImpersonation: !usingImpersonation,
         },
-      });
-      this.setState({
-        isChecked: newImpersonationState,
       });
     };
 
@@ -100,20 +93,24 @@ export class ConfigEditor extends PureComponent<Props> {
           <div>
             <Checkbox
               label="To impersonate an existing Google Cloud service account."
-              value={this.state.isChecked}
-              onChange={() => handleClick()}
+              value={usingImpersonation}
+              onChange={handleImpersonationToggle}
               onPointerEnterCapture={undefined}
               onPointerLeaveCapture={undefined}
             />
-            {this.state.isChecked && (
-              <Field label="Service Account">
+            {usingImpersonation && (
+              <Field label="Service Account" htmlFor="serviceAccount">
                 <Input
                   id="serviceAccount"
                   width={60}
-                  value={this.state.sa}
+                  value={serviceAccountToImpersonate}
                   onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
-                    this.setState({ sa: e.target.value }, () => {
-                      this.props.options.jsonData.serviceAccountToImpersonate = this.state.sa;
+                    onOptionsChange({
+                      ...options,
+                      jsonData: {
+                        ...options.jsonData,
+                        serviceAccountToImpersonate: e.currentTarget.value,
+                      },
                     });
                   }}
                   onPointerEnterCapture={undefined}
@@ -224,8 +221,10 @@ const defaultProject = (props: Props) => {
       <Field
         label="Default Project ID"
         description="Required for OAuth passthrough; optional override for GCE / local Application Default Credentials"
+        htmlFor="default-project"
       >
         <Input
+          id="default-project"
           autoComplete="off"
           value={options.jsonData.defaultProject || ''}
           onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
