@@ -789,3 +789,19 @@ func TestCallResource_ProjectExists_Error(t *testing.T) {
 	require.Contains(t, string(sender.resp.Body), "backend unavailable")
 	client.AssertExpectations(t)
 }
+
+func TestCloudLoggingDatasource_Dispose_OAuthPassthrough(t *testing.T) {
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: []byte(`{"oauthPassThru": true, "authenticationType": "oauthPassthrough", "defaultProject": "test-project"}`),
+	}
+
+	inst, err := NewCloudLoggingDatasource(context.Background(), settings)
+	require.NoError(t, err)
+	require.NotNil(t, inst)
+
+	ds, ok := inst.(*CloudLoggingDatasource)
+	require.True(t, ok)
+	require.True(t, ds.oauthPassThrough)
+	require.Nil(t, ds.client)
+	require.NotPanics(t, ds.Dispose)
+}
