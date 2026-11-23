@@ -19,9 +19,12 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
+	"cloud.google.com/go/auth"
+	"cloud.google.com/go/auth/credentials"
 	logging "cloud.google.com/go/logging/apiv2"
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
@@ -30,6 +33,8 @@ import (
 	"google.golang.org/api/impersonate"
 	"google.golang.org/api/iterator"
 	"google.golang.org/api/option"
+	htransport "google.golang.org/api/transport/http"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -43,6 +48,15 @@ import (
 )
 
 const testConnectionTimeout = time.Minute * 1
+
+var defaultAuthScopes = []string{"https://www.googleapis.com/auth/cloud-platform.read-only"}
+
+// ProxyConfig holds optional Private Data Source Connect (PDC) proxy settings.
+// When nil, all GCP API and OAuth2 token requests connect directly.
+type ProxyConfig struct {
+	GRPCDialOption grpc.DialOption
+	HTTPClient     *http.Client
+}
 
 // API implements the methods we need to query logs and list projects from GCP
 type API interface {
@@ -78,6 +92,25 @@ func universeDomainOpts(universeDomain string) []option.ClientOption {
 	return []option.ClientOption{option.WithUniverseDomain(universeDomain)}
 }
 
+func proxyGRPCOpts(proxyCfg *ProxyConfig) []option.ClientOption {
+	if proxyCfg == nil || proxyCfg.GRPCDialOption == nil {
+		return nil
+	}
+	return []option.ClientOption{option.WithGRPCDialOption(proxyCfg.GRPCDialOption)}
+}
+
+func proxyAuthCreds(jsonCreds []byte, universeDomain string, httpClient *http.Client, scopes []string) (*auth.Credentials, error) {
+	detectOpts := &credentials.DetectOptions{
+		Scopes:         scopes,
+		Client:         httpClient,
+		UniverseDomain: universeDomain,
+	}
+	if jsonCreds != nil {
+		return credentials.NewCredentialsFromJSON(credentials.ServiceAccount, jsonCreds, detectOpts)
+	}
+	return credentials.DetectDefault(detectOpts)
+}
+
 // newClientFromOpts builds the three GCP clients that back Client. If any
 // constructor fails, the previously-created clients are closed so we don't
 // leak gRPC connections.
@@ -105,43 +138,79 @@ func newClientFromOpts(ctx context.Context, opts []option.ClientOption) (*Client
 }
 
 // NewClient creates a new Client using jsonCreds for authentication
-func NewClient(ctx context.Context, jsonCreds []byte, universeDomain string) (*Client, error) {
-	opts := append([]option.ClientOption{
-		option.WithCredentialsJSON(jsonCreds),
+func NewClient(ctx context.Context, jsonCreds []byte, universeDomain string, proxyCfg *ProxyConfig) (*Client, error) {
+	opts := []option.ClientOption{
 		option.WithUserAgent("googlecloud-logging-datasource"),
-	}, universeDomainOpts(universeDomain)...)
+	}
+	if proxyCfg != nil && proxyCfg.HTTPClient != nil {
+		creds, err := proxyAuthCreds(jsonCreds, universeDomain, proxyCfg.HTTPClient, defaultAuthScopes)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, option.WithAuthCredentials(creds))
+	} else {
+		opts = append(opts, option.WithCredentialsJSON(jsonCreds))
+	}
+	opts = append(opts, universeDomainOpts(universeDomain)...)
+	opts = append(opts, proxyGRPCOpts(proxyCfg)...)
 
 	return newClientFromOpts(ctx, opts)
 }
 
-// NewClient creates a new Clients using GCE metadata for authentication
-func NewClientWithGCE(ctx context.Context, universeDomain string) (*Client, error) {
-	opts := append([]option.ClientOption{
+// NewClientWithGCE creates a new Client using GCE metadata / ADC for authentication
+func NewClientWithGCE(ctx context.Context, universeDomain string, proxyCfg *ProxyConfig) (*Client, error) {
+	opts := []option.ClientOption{
 		option.WithUserAgent("googlecloud-logging-datasource"),
-	}, universeDomainOpts(universeDomain)...)
+	}
+	if proxyCfg != nil && proxyCfg.HTTPClient != nil {
+		creds, err := proxyAuthCreds(nil, universeDomain, proxyCfg.HTTPClient, defaultAuthScopes)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, option.WithAuthCredentials(creds))
+	}
+	opts = append(opts, universeDomainOpts(universeDomain)...)
+	opts = append(opts, proxyGRPCOpts(proxyCfg)...)
 
 	return newClientFromOpts(ctx, opts)
 }
 
-// NewClient creates a new Clients using service account impersonation
-func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersonateSA string, universeDomain string) (*Client, error) {
-	var ts oauth2.TokenSource
-	var err error
-
+// NewImpersonationTokenSource builds the OAuth2 token source used for service
+// account impersonation, routing token and IAMCredentials HTTP calls through
+// proxyCfg.HTTPClient (preserving its Timeout) when configured.
+func NewImpersonationTokenSource(ctx context.Context, jsonCreds []byte, impersonateSA string, universeDomain string, proxyCfg *ProxyConfig) (oauth2.TokenSource, error) {
 	impersonateOpts := append([]option.ClientOption{}, universeDomainOpts(universeDomain)...)
 
-	if jsonCreds == nil {
-		ts, err = impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
-			TargetPrincipal: impersonateSA,
-			Scopes:          []string{"https://www.googleapis.com/auth/cloud-platform.read-only"},
-		}, impersonateOpts...)
-	} else {
+	if proxyCfg != nil && proxyCfg.HTTPClient != nil {
+		baseCreds, credErr := proxyAuthCreds(jsonCreds, universeDomain, proxyCfg.HTTPClient, []string{"https://www.googleapis.com/auth/cloud-platform"})
+		if credErr != nil {
+			return nil, credErr
+		}
+		baseAuthOpts := append([]option.ClientOption{
+			option.WithAuthCredentials(baseCreds),
+			option.WithScopes("https://www.googleapis.com/auth/cloud-platform"),
+		}, universeDomainOpts(universeDomain)...)
+		authTransport, transportErr := htransport.NewTransport(ctx, proxyCfg.HTTPClient.Transport, baseAuthOpts...)
+		if transportErr != nil {
+			return nil, transportErr
+		}
+		impersonateOpts = append(impersonateOpts, option.WithHTTPClient(&http.Client{
+			Transport: authTransport,
+			Timeout:   proxyCfg.HTTPClient.Timeout,
+		}))
+	} else if jsonCreds != nil {
 		impersonateOpts = append(impersonateOpts, option.WithCredentialsJSON(jsonCreds))
-		ts, err = impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
-			TargetPrincipal: impersonateSA,
-			Scopes:          []string{"https://www.googleapis.com/auth/cloud-platform.read-only"},
-		}, impersonateOpts...)
 	}
+
+	return impersonate.CredentialsTokenSource(ctx, impersonate.CredentialsConfig{
+		TargetPrincipal: impersonateSA,
+		Scopes:          defaultAuthScopes,
+	}, impersonateOpts...)
+}
+
+// NewClientWithImpersonation creates a new Client using service account impersonation
+func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersonateSA string, universeDomain string, proxyCfg *ProxyConfig) (*Client, error) {
+	ts, err := NewImpersonationTokenSource(ctx, jsonCreds, impersonateSA, universeDomain, proxyCfg)
 	if err != nil {
 		return nil, err
 	}
@@ -150,25 +219,27 @@ func NewClientWithImpersonation(ctx context.Context, jsonCreds []byte, impersona
 		option.WithTokenSource(ts),
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}, universeDomainOpts(universeDomain)...)
+	opts = append(opts, proxyGRPCOpts(proxyCfg)...)
 
 	return newClientFromOpts(ctx, opts)
 }
 
 // NewClientWithAccessToken creates a new Client using an access token for authentication.
 // Since the datasource is re-created whenever the token changes, we can treat this token as static.
-func NewClientWithAccessToken(ctx context.Context, accessToken string, universeDomain string) (*Client, error) {
+func NewClientWithAccessToken(ctx context.Context, accessToken string, universeDomain string, proxyCfg *ProxyConfig) (*Client, error) {
 	ts := oauth2.StaticTokenSource(&oauth2.Token{AccessToken: accessToken})
 
 	opts := append([]option.ClientOption{
 		option.WithTokenSource(ts),
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}, universeDomainOpts(universeDomain)...)
+	opts = append(opts, proxyGRPCOpts(proxyCfg)...)
 
 	return newClientFromOpts(ctx, opts)
 }
 
-// NewClientWithPassThrough creates a new Clients using Oauth browser credentials
-func NewClientWithPassThrough(ctx context.Context, headers map[string]string, universeDomain string) (*Client, error) {
+// NewClientWithPassThrough creates a new Client using OAuth browser credentials
+func NewClientWithPassThrough(ctx context.Context, headers map[string]string, universeDomain string, proxyCfg *ProxyConfig) (*Client, error) {
 	token, found := strings.CutPrefix(headers["Authorization"], "Bearer ")
 	if !found || token == "" {
 		return nil, errors.New("missing or invalid Authorization header")
@@ -182,6 +253,7 @@ func NewClientWithPassThrough(ctx context.Context, headers map[string]string, un
 		),
 		option.WithUserAgent("googlecloud-logging-datasource"),
 	}, universeDomainOpts(universeDomain)...)
+	opts = append(opts, proxyGRPCOpts(proxyCfg)...)
 
 	return newClientFromOpts(ctx, opts)
 }

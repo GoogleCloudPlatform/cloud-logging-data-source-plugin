@@ -59,6 +59,7 @@ export interface DataSourceOptionsExt extends DataSourceOptions {
   projectListFilter?: string;
   logBucketFilter?: string;
   logsToTraces?: LogsToTracesOptions;
+  enableSecureSocksProxy?: boolean;
 }
 
 /**

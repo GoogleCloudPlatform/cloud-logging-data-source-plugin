@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -28,9 +29,12 @@ import (
 	"github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/cloudlogging"
 	"github.com/grafana/grafana-google-sdk-go/pkg/utils"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/httpclient"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
+	golangproxy "golang.org/x/net/proxy"
+	"google.golang.org/grpc"
 )
 
 // Make sure CloudLoggingDatasource implements required interfaces
@@ -116,6 +120,11 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		}
 	}
 
+	proxyCfg, err := buildProxyConfig(ctx, settings)
+	if err != nil {
+		return nil, fmt.Errorf("configure proxy: %s", sanitizeErrorMessage(err))
+	}
+
 	oauthPassThrough := false
 
 	var client_err error
@@ -133,22 +142,22 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		}
 
 		if conf.UsingImpersonation {
-			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), serviceAccount, conf.ServiceAccountToImpersonate, conf.UniverseDomain)
+			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), serviceAccount, conf.ServiceAccountToImpersonate, conf.UniverseDomain, proxyCfg)
 		} else {
-			client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount, conf.UniverseDomain)
+			client, client_err = cloudlogging.NewClient(context.TODO(), serviceAccount, conf.UniverseDomain, proxyCfg)
 		}
 	case gceAuthentication:
 		if conf.UsingImpersonation {
-			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), nil, conf.ServiceAccountToImpersonate, conf.UniverseDomain)
+			client, client_err = cloudlogging.NewClientWithImpersonation(context.TODO(), nil, conf.ServiceAccountToImpersonate, conf.UniverseDomain, proxyCfg)
 		} else {
-			client, client_err = cloudlogging.NewClientWithGCE(context.TODO(), conf.UniverseDomain)
+			client, client_err = cloudlogging.NewClientWithGCE(context.TODO(), conf.UniverseDomain, proxyCfg)
 		}
 	case accessTokenAuthentication:
 		accessToken, ok := settings.DecryptedSecureJSONData[accessTokenKey]
 		if !ok || accessToken == "" {
 			return nil, errMissingAccessToken
 		}
-		client, client_err = cloudlogging.NewClientWithAccessToken(context.TODO(), accessToken, conf.UniverseDomain)
+		client, client_err = cloudlogging.NewClientWithAccessToken(context.TODO(), accessToken, conf.UniverseDomain, proxyCfg)
 	case oauthpassthroughAuthentication:
 		oauthPassThrough = true
 	default:
@@ -175,6 +184,58 @@ func NewCloudLoggingDatasource(ctx context.Context, settings backend.DataSourceI
 		client:           apiClient,
 		oauthPassThrough: oauthPassThrough,
 		universeDomain:   conf.UniverseDomain,
+		proxyCfg:         proxyCfg,
+	}, nil
+}
+
+// buildProxyConfig builds gRPC and HTTP proxy settings when Grafana's Secure
+// SOCKS Proxy (Private Data Source Connect / PDC) is enabled on both the
+// Grafana instance and this data source.
+func buildProxyConfig(ctx context.Context, settings backend.DataSourceInstanceSettings) (*cloudlogging.ProxyConfig, error) {
+	// Short-circuit before calling settings.ProxyClient(ctx) so malformed
+	// server-level proxy env vars never break datasources that have not enabled PDC.
+	var dsProxy struct {
+		EnableSecureSocksProxy bool `json:"enableSecureSocksProxy"`
+	}
+	if len(settings.JSONData) > 0 {
+		if err := json.Unmarshal(settings.JSONData, &dsProxy); err != nil {
+			return nil, err
+		}
+	}
+	if !dsProxy.EnableSecureSocksProxy {
+		return nil, nil
+	}
+
+	proxyClient, err := settings.ProxyClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !proxyClient.SecureSocksProxyEnabled() {
+		return nil, nil
+	}
+
+	socksDialer, err := proxyClient.NewSecureSocksProxyContextDialer()
+	if err != nil {
+		return nil, fmt.Errorf("create secure socks proxy dialer: %w", err)
+	}
+
+	httpOpts, err := settings.HTTPClientOptions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("get http client options: %w", err)
+	}
+	httpClient, err := httpclient.New(httpOpts)
+	if err != nil {
+		return nil, fmt.Errorf("create proxy http client: %w", err)
+	}
+
+	return &cloudlogging.ProxyConfig{
+		GRPCDialOption: grpc.WithContextDialer(func(dialCtx context.Context, addr string) (net.Conn, error) {
+			if ctxDialer, ok := socksDialer.(golangproxy.ContextDialer); ok {
+				return ctxDialer.DialContext(dialCtx, "tcp", addr)
+			}
+			return socksDialer.Dial("tcp", addr)
+		}),
+		HTTPClient: httpClient,
 	}, nil
 }
 
@@ -184,6 +245,7 @@ type CloudLoggingDatasource struct {
 	client           cloudlogging.API
 	oauthPassThrough bool
 	universeDomain   string
+	proxyCfg         *cloudlogging.ProxyConfig
 }
 
 // Dispose here tells plugin SDK that plugin wants to clean up resources when a new instance
@@ -194,6 +256,9 @@ func (d *CloudLoggingDatasource) Dispose() {
 		if err := d.client.Close(); err != nil {
 			log.DefaultLogger.Error("failed closing client", "error", err)
 		}
+	}
+	if d.proxyCfg != nil && d.proxyCfg.HTTPClient != nil {
+		d.proxyCfg.HTTPClient.CloseIdleConnections()
 	}
 }
 
@@ -635,7 +700,7 @@ func sanitizeErrorMessage(err error) string {
 }
 
 func (d *CloudLoggingDatasource) CreateOauthClient(ctx context.Context, headers map[string]string) (*cloudlogging.Client, error) {
-	client, err := cloudlogging.NewClientWithPassThrough(ctx, headers, d.universeDomain)
+	client, err := cloudlogging.NewClientWithPassThrough(ctx, headers, d.universeDomain, d.proxyCfg)
 	if err != nil {
 		return nil, fmt.Errorf("create oauth client: %s", sanitizeErrorMessage(err))
 	}
