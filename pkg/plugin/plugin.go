@@ -16,6 +16,7 @@ package plugin
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -33,6 +34,7 @@ import (
 	"github.com/grafana/grafana-plugin-sdk-go/backend/instancemgmt"
 	"github.com/grafana/grafana-plugin-sdk-go/backend/log"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
+	"github.com/grafana/grafana-plugin-sdk-go/experimental/featuretoggles"
 	golangproxy "golang.org/x/net/proxy"
 	"google.golang.org/grpc"
 )
@@ -211,6 +213,7 @@ func buildProxyConfig(ctx context.Context, settings backend.DataSourceInstanceSe
 		return nil, err
 	}
 	if !proxyClient.SecureSocksProxyEnabled() {
+		log.DefaultLogger.Warn("Secure SOCKS Proxy is enabled on the data source, but disabled on the Grafana instance; connecting directly")
 		return nil, nil
 	}
 
@@ -223,7 +226,20 @@ func buildProxyConfig(ctx context.Context, settings backend.DataSourceInstanceSe
 	if err != nil {
 		return nil, fmt.Errorf("get http client options: %w", err)
 	}
-	httpClient, err := httpclient.New(httpOpts)
+	// Scope the proxy HTTP client strictly to proxy/timeout (and server TLS 1.3
+	// policy) so datasource BasicAuth or custom HTTP headers never leak onto
+	// Google OAuth2 / IAMCredentials token requests.
+	proxyHTTPOpts := httpclient.Options{
+		Timeouts:     httpOpts.Timeouts,
+		ProxyOptions: httpOpts.ProxyOptions,
+	}
+	if cfg := backend.GrafanaConfigFromContext(ctx); cfg != nil && cfg.FeatureToggles().IsEnabled(featuretoggles.PluginsForceTLS13) {
+		proxyHTTPOpts.TLS = &httpclient.TLSOptions{
+			MinVersion: tls.VersionTLS13,
+			MaxVersion: tls.VersionTLS13,
+		}
+	}
+	httpClient, err := httpclient.New(proxyHTTPOpts)
 	if err != nil {
 		return nil, fmt.Errorf("create proxy http client: %w", err)
 	}

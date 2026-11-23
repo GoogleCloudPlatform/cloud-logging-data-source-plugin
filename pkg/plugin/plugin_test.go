@@ -831,6 +831,22 @@ func TestBuildProxyConfig_DisabledIgnoresMalformedServerEnv(t *testing.T) {
 	require.Nil(t, cfg)
 }
 
+func TestBuildProxyConfig_ServerProxyDisabledReturnsNil(t *testing.T) {
+	grafanaCfg := backend.NewGrafanaCfg(map[string]string{
+		proxy.PluginSecureSocksProxyEnabled: "false",
+	})
+	ctx := backend.WithGrafanaConfig(context.Background(), grafanaCfg)
+	settings := backend.DataSourceInstanceSettings{
+		Type:     "googlecloud-logging-datasource",
+		Name:     "test-logging",
+		JSONData: json.RawMessage(`{"authenticationType":"accessToken","enableSecureSocksProxy":true}`),
+	}
+
+	cfg, err := buildProxyConfig(ctx, settings)
+	require.NoError(t, err)
+	require.Nil(t, cfg)
+}
+
 func TestBuildProxyConfig_Enabled(t *testing.T) {
 	grafanaCfg := backend.NewGrafanaCfg(map[string]string{
 		proxy.PluginSecureSocksProxyEnabled:       "true",
