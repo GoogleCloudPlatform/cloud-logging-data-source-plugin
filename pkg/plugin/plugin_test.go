@@ -32,6 +32,7 @@ import (
 	"github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/cloudlogging"
 	"github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/pkg/plugin/mocks"
 	"github.com/grafana/grafana-plugin-sdk-go/backend"
+	"github.com/grafana/grafana-plugin-sdk-go/backend/proxy"
 	"github.com/grafana/grafana-plugin-sdk-go/data"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -804,4 +805,85 @@ func TestCloudLoggingDatasource_Dispose_OAuthPassthrough(t *testing.T) {
 	require.True(t, ds.oauthPassThrough)
 	require.Nil(t, ds.client)
 	require.NotPanics(t, ds.Dispose)
+}
+
+func TestBuildProxyConfig_Disabled(t *testing.T) {
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: json.RawMessage(`{"authenticationType":"accessToken"}`),
+	}
+	cfg, err := buildProxyConfig(context.Background(), settings)
+	require.NoError(t, err)
+	require.Nil(t, cfg)
+}
+
+func TestBuildProxyConfig_DisabledIgnoresMalformedServerEnv(t *testing.T) {
+	grafanaCfg := backend.NewGrafanaCfg(map[string]string{
+		proxy.PluginSecureSocksProxyEnabled:       "true",
+		proxy.PluginSecureSocksProxyAllowInsecure: "not-a-bool",
+	})
+	ctx := backend.WithGrafanaConfig(context.Background(), grafanaCfg)
+	settings := backend.DataSourceInstanceSettings{
+		JSONData: json.RawMessage(`{"authenticationType":"accessToken","enableSecureSocksProxy":false}`),
+	}
+
+	cfg, err := buildProxyConfig(ctx, settings)
+	require.NoError(t, err)
+	require.Nil(t, cfg)
+}
+
+func TestBuildProxyConfig_Enabled(t *testing.T) {
+	grafanaCfg := backend.NewGrafanaCfg(map[string]string{
+		proxy.PluginSecureSocksProxyEnabled:       "true",
+		proxy.PluginSecureSocksProxyProxyAddress:  "127.0.0.1:5555",
+		proxy.PluginSecureSocksProxyAllowInsecure: "true",
+	})
+	ctx := backend.WithGrafanaConfig(context.Background(), grafanaCfg)
+	settings := backend.DataSourceInstanceSettings{
+		Type:     "googlecloud-logging-datasource",
+		Name:     "test-logging",
+		JSONData: json.RawMessage(`{"authenticationType":"accessToken","enableSecureSocksProxy":true}`),
+	}
+
+	cfg, err := buildProxyConfig(ctx, settings)
+	require.NoError(t, err)
+	require.NotNil(t, cfg)
+	require.NotNil(t, cfg.GRPCDialOption)
+	require.NotNil(t, cfg.HTTPClient)
+}
+
+func TestNewCloudLoggingDatasource_PDCEnabled(t *testing.T) {
+	grafanaCfg := backend.NewGrafanaCfg(map[string]string{
+		proxy.PluginSecureSocksProxyEnabled:       "true",
+		proxy.PluginSecureSocksProxyProxyAddress:  "127.0.0.1:5555",
+		proxy.PluginSecureSocksProxyAllowInsecure: "true",
+	})
+	ctx := backend.WithGrafanaConfig(context.Background(), grafanaCfg)
+
+	t.Run("accessToken datasource stores proxy config", func(t *testing.T) {
+		inst, err := NewCloudLoggingDatasource(ctx, backend.DataSourceInstanceSettings{
+			Type:                    "googlecloud-logging-datasource",
+			Name:                    "test-logging",
+			JSONData:                json.RawMessage(`{"authenticationType":"accessToken","enableSecureSocksProxy":true}`),
+			DecryptedSecureJSONData: map[string]string{"accessToken": "test-token"},
+		})
+		require.NoError(t, err)
+		ds := inst.(*CloudLoggingDatasource)
+		defer ds.Dispose()
+		require.NotNil(t, ds.proxyCfg)
+		require.NotNil(t, ds.proxyCfg.GRPCDialOption)
+		require.NotNil(t, ds.proxyCfg.HTTPClient)
+	})
+
+	t.Run("oauthPassthrough datasource stores proxy config", func(t *testing.T) {
+		inst, err := NewCloudLoggingDatasource(ctx, backend.DataSourceInstanceSettings{
+			Type:     "googlecloud-logging-datasource",
+			Name:     "test-logging",
+			JSONData: json.RawMessage(`{"authenticationType":"oauthPassthrough","oauthPassThru":true,"enableSecureSocksProxy":true}`),
+		})
+		require.NoError(t, err)
+		ds := inst.(*CloudLoggingDatasource)
+		defer ds.Dispose()
+		require.True(t, ds.oauthPassThrough)
+		require.NotNil(t, ds.proxyCfg)
+	})
 }

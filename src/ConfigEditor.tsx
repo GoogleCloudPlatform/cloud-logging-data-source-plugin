@@ -16,8 +16,8 @@
 
 import { DataSourcePluginOptionsEditorProps, SelectableValue } from '@grafana/data';
 import { ConnectionConfig, GoogleAuthType } from '@grafana/google-sdk';
-import { DataSourcePicker } from '@grafana/runtime';
-import { Checkbox, Field, FieldSet, Input, SecretInput, Select, TextArea } from '@grafana/ui';
+import { config, DataSourcePicker } from '@grafana/runtime';
+import { Checkbox, Field, FieldSet, Input, SecretInput, SecureSocksProxySettings, Select, TextArea } from '@grafana/ui';
 import React, { PureComponent } from 'react';
 import { authTypes, CloudLoggingOptions, DataSourceSecureJsonData, LogsToTracesOptions } from './types';
 
@@ -161,6 +161,11 @@ export class ConfigEditor extends PureComponent<Props> {
         ) : null}
         {defaultProject(this.props)}
         {logsToTraces(this.props)}
+        {Boolean((config as unknown as { secureSocksDSProxyEnabled?: boolean }).secureSocksDSProxyEnabled) && (
+          <div data-testid="secure-socks-proxy-settings">
+            <SecureSocksProxySettings options={options} onOptionsChange={onOptionsChange} />
+          </div>
+        )}
       </>
     );
   }

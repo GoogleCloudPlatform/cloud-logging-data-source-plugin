@@ -65,6 +65,10 @@ If you are using a Google Cloud environment that uses a custom universe domain (
 
 Leave this field empty to use the default `googleapis.com` domain.
 
+### Private Data Source Connect (PDC)
+
+If your Grafana instance has the Secure SOCKS Proxy (`secureSocksDSProxyEnabled`) enabled — for example, Grafana Cloud with [Private Data Source Connect (PDC)](https://grafana.com/docs/grafana-cloud/connect-externally-hosted/private-data-source-connect/) into a VPC Service Controls (VPC-SC) perimeter — enable **Secure Socks Proxy** (`enableSecureSocksProxy: true` in `jsonData`) in the data source settings. Both gRPC API calls and OAuth2/impersonation token requests are routed through the configured SOCKS proxy.
+
 ### Grafana Configuration
 
 1. With Grafana restarted, navigate to `Configuration -> Data sources` (or the route `/datasources`)
