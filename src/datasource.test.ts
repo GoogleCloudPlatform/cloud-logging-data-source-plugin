@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-import { ArrayVector, DataFrame, DataSourcePluginMeta, FieldType, Labels, ScopedVars } from '@grafana/data';
+import { AdHocVariableFilter, ArrayVector, DataFrame, DataSourcePluginMeta, FieldType, Labels, ScopedVars } from '@grafana/data';
 import { DataSourceWithBackend, TemplateSrv } from '@grafana/runtime';
 import { GoogleAuthType } from '@grafana/google-sdk';
 import { random } from 'lodash';
@@ -521,6 +521,262 @@ describe('Google Cloud Logging Data Source', () => {
             const ds = makeDataSource({ defaultProject: 'my-default-proj' }, passthroughTemplateSrv);
             const query = { refId: 'A' } as Query;
             expect(ds.applyTemplateVariables(query, {} as ScopedVars).projectId).toBe('');
+        });
+    });
+
+    describe('ad hoc filters', () => {
+        const passthroughTemplateSrv = {
+            replace: (s?: string) => s ?? '',
+        } as unknown as TemplateSrv;
+
+        const filter = (key: string, operator: string, value: string): AdHocVariableFilter => ({
+            key,
+            operator,
+            value,
+            condition: '',
+        });
+
+        afterEach(() => {
+            jest.restoreAllMocks();
+        });
+
+        it('returns standard Cloud Logging fields from getTagKeys before any queries run', async () => {
+            const ds = makeDataSource();
+            const keys = (await ds.getTagKeys()).map((k) => k.text);
+            expect(keys).toContain('severity');
+            expect(keys).toContain('resource.type');
+            expect(keys).toContain('logName');
+            expect(keys).toContain('insertId');
+            expect(keys).toContain('httpRequest.status');
+            expect(keys).toContain('resource.labels.pod_name');
+        });
+
+        it('returns Cloud Logging severities from getTagValues for severity and level', async () => {
+            const ds = makeDataSource();
+            const expected = [
+                'DEFAULT',
+                'DEBUG',
+                'INFO',
+                'NOTICE',
+                'WARNING',
+                'ERROR',
+                'CRITICAL',
+                'ALERT',
+                'EMERGENCY',
+            ].map((text) => ({ text }));
+            expect(await ds.getTagValues({ key: 'severity' })).toEqual(expected);
+            expect(await ds.getTagValues({ key: 'level' })).toEqual(expected);
+            expect(await ds.getTagValues({})).toEqual([]);
+            expect(await ds.getTagValues({ key: 'unknown.field' })).toEqual([]);
+        });
+
+        it('records observed label keys and values from query responses for autocomplete', async () => {
+            const ds = makeDataSource();
+            const frame: DataFrame = {
+                name: 'A',
+                refId: 'A',
+                length: 2,
+                fields: [
+                    {
+                        name: 'labels',
+                        type: FieldType.other,
+                        config: {},
+                        values: new ArrayVector([
+                            {
+                                'resource.type': 'k8s_container',
+                                'labels."k8s-pod/app"': 'checkout',
+                                'jsonPayload.service': 'payments',
+                                textPayload: 'should not be cached as tag value',
+                                trace: 'projects/p1/traces/abc123',
+                                spanId: 'span-123',
+                                'jsonPayload.multiline': 'line1\nline2',
+                                'jsonPayload.cr': 'line1\rline2',
+                            },
+                            {
+                                'resource.type': 'cloud_run_revision',
+                                'labels."k8s-pod/app"': 'billing',
+                                'jsonPayload.long': 'x'.repeat(250),
+                            },
+                        ]),
+                    },
+                ],
+            };
+            jest.spyOn(DataSourceWithBackend.prototype, 'query').mockReturnValue(of({ data: [frame] }));
+            await lastValueFrom(ds.query({ targets: [], scopedVars: {} } as unknown as Parameters<DataSource['query']>[0]));
+
+            const keys = (await ds.getTagKeys()).map((k) => k.text);
+            expect(keys).toContain('labels."k8s-pod/app"');
+            expect(keys).toContain('jsonPayload.service');
+            // Deduplicated with defaults
+            expect(keys.filter((k) => k === 'resource.type')).toHaveLength(1);
+
+            expect(await ds.getTagValues({ key: 'resource.type' })).toEqual([
+                { text: 'cloud_run_revision' },
+                { text: 'k8s_container' },
+            ]);
+            expect(await ds.getTagValues({ key: 'labels."k8s-pod/app"' })).toEqual([
+                { text: 'billing' },
+                { text: 'checkout' },
+            ]);
+            expect(await ds.getTagValues({ key: 'textPayload' })).toEqual([]);
+            expect(await ds.getTagValues({ key: 'trace' })).toEqual([]);
+            expect(await ds.getTagValues({ key: 'spanId' })).toEqual([]);
+            expect(await ds.getTagValues({ key: 'jsonPayload.multiline' })).toEqual([]);
+            expect(await ds.getTagValues({ key: 'jsonPayload.cr' })).toEqual([]);
+            expect(await ds.getTagValues({ key: 'jsonPayload.long' })).toEqual([]);
+        });
+
+        it('evicts oldest observed keys and values via LRU instead of freezing at capacity', async () => {
+            const ds = makeDataSource();
+            const firstBatchLabels: Record<string, string> = {};
+            for (let i = 0; i < 200; i++) {
+                firstBatchLabels[`jsonPayload.old_key_${i}`] = `v${i}`;
+            }
+            const valueRows = Array.from({ length: 60 }, (_, i) => ({
+                'jsonPayload.env': `val-${String(i).padStart(2, '0')}`,
+            }));
+            const makeFrame = (rows: Array<Record<string, string>>): DataFrame => ({
+                name: 'A',
+                refId: 'A',
+                length: rows.length,
+                fields: [{ name: 'labels', type: FieldType.other, config: {}, values: new ArrayVector(rows) }],
+            });
+
+            const querySpy = jest.spyOn(DataSourceWithBackend.prototype, 'query');
+            querySpy.mockReturnValueOnce(of({ data: [makeFrame([firstBatchLabels])] }));
+            await lastValueFrom(ds.query({ targets: [], scopedVars: {} } as unknown as Parameters<DataSource['query']>[0]));
+
+            querySpy.mockReturnValueOnce(of({ data: [makeFrame([{ 'jsonPayload.new_project_key': 'fresh' }, ...valueRows])] }));
+            await lastValueFrom(ds.query({ targets: [], scopedVars: {} } as unknown as Parameters<DataSource['query']>[0]));
+
+            const keys = (await ds.getTagKeys()).map((k) => k.text);
+            expect(keys).toContain('jsonPayload.new_project_key');
+            expect(keys).toContain('jsonPayload.env');
+            expect(keys).not.toContain('jsonPayload.old_key_0');
+            expect(keys).not.toContain('jsonPayload.old_key_1');
+
+            const envValues = (await ds.getTagValues({ key: 'jsonPayload.env' })).map((v) => v.text);
+            expect(envValues).toHaveLength(50);
+            expect(envValues).toContain('val-59');
+            expect(envValues).not.toContain('val-00');
+        });
+
+        it('handles query responses with missing data array without throwing', async () => {
+            const ds = makeDataSource();
+            jest.spyOn(DataSourceWithBackend.prototype, 'query').mockReturnValue(of({} as unknown as { data: DataFrame[] }));
+            await expect(
+                lastValueFrom(ds.query({ targets: [], scopedVars: {} } as unknown as Parameters<DataSource['query']>[0]))
+            ).resolves.toEqual({});
+        });
+
+        it('appends ad hoc filters to queryText across supported operators', () => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'my-proj', queryText: 'severity="ERROR" OR severity="CRITICAL"' } as Query;
+            const result = ds.applyTemplateVariables(query, {} as ScopedVars, [
+                filter('resource.type', '=', 'k8s_container'),
+                filter('labels."k8s-pod/app"', '!=', 'healthcheck'),
+                filter('jsonPayload.msg', '=~', 'timeout|refused'),
+                filter('jsonPayload.msg', '!~', '^debug'),
+                filter('httpRequest.status', '>=', '500'),
+                filter('severity', '>', 'INFO'),
+            ]);
+            expect(result.queryText).toBe(
+                [
+                    'severity="ERROR" OR severity="CRITICAL"',
+                    'resource.type="k8s_container"',
+                    'labels."k8s-pod/app"!="healthcheck"',
+                    'jsonPayload.msg=~"timeout|refused"',
+                    'jsonPayload.msg!~"^debug"',
+                    'httpRequest.status>="500"',
+                    'severity>"INFO"',
+                ].join('\n')
+            );
+        });
+
+        it('populates queryText cleanly when base queryText is empty', () => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'my-proj', queryText: '' } as Query;
+            const result = ds.applyTemplateVariables(query, {} as ScopedVars, [
+                filter('resource.type', '=', 'gce_instance'),
+            ]);
+            expect(result.queryText).toBe('resource.type="gce_instance"');
+        });
+
+        it('applies ad hoc filters to legacy span-link query when queryText is empty', () => {
+            const ds = makeDataSource({ defaultProject: 'default-proj' }, passthroughTemplateSrv);
+            const query = { refId: 'A', query: 'trace="projects/p/traces/abc"' } as Query;
+            const result = ds.applyTemplateVariables(query, {} as ScopedVars, [
+                filter('severity', '=', 'ERROR'),
+            ]);
+            expect(result.queryText).toBe('');
+            expect(result.query).toBe('trace="projects/p/traces/abc"\nseverity="ERROR"');
+            expect(result.projectId).toBe('default-proj');
+        });
+
+        it('maps id to insertId, level to severity, and escapes special characters in values', () => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'my-proj', queryText: '' } as Query;
+            const result = ds.applyTemplateVariables(query, {} as ScopedVars, [
+                filter('id', '=', 'abc-123'),
+                filter('level', '!=', 'debug'),
+                filter('jsonPayload.msg', '=', 'say "hi"\\npath\\x\r\nline2'),
+            ]);
+            expect(result.queryText).toBe(
+                [
+                    'insertId="abc-123"',
+                    'severity!="debug"',
+                    'jsonPayload.msg="say \\"hi\\"\\\\npath\\\\x\\r\\nline2"',
+                ].join('\n')
+            );
+        });
+
+        it('ignores incomplete UI filters and groupBy tokens', () => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'my-proj', queryText: 'severity >= DEFAULT' } as Query;
+            const result = ds.applyTemplateVariables(query, {} as ScopedVars, [
+                filter('', '=', 'foo'),
+                filter('resource.type', '=', ''),
+                filter('resource.type', 'groupBy', 'k8s_container'),
+                filter('resource.type', '=', 'k8s_container'),
+            ]);
+            expect(result.queryText).toBe('severity >= DEFAULT\nresource.type="k8s_container"');
+        });
+
+        it.each([
+            ['OR textPayload', '='],
+            ['OR', '='],
+            ['AND', '='],
+            ['NOT', '='],
+            ['resource.type\nseverity="ERROR"', '='],
+            ['labels.k8s-pod/app', '='],
+            ['severity="ERROR") OR (severity', '='],
+        ])('rejects invalid or injection-prone filter key %j', (badKey, op) => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'my-proj', queryText: 'severity >= ERROR' } as Query;
+            expect(() =>
+                ds.applyTemplateVariables(query, {} as ScopedVars, [filter(badKey, op, 'x')])
+            ).toThrow(/Invalid Ad Hoc filter key/);
+        });
+
+        it('rejects unsupported filter operators instead of silently broadening results', () => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const query = { refId: 'A', projectId: 'my-proj', queryText: 'severity >= ERROR' } as Query;
+            expect(() =>
+                ds.applyTemplateVariables(query, {} as ScopedVars, [filter('resource.type', '=|', 'k8s_container')])
+            ).toThrow(/Unsupported Ad Hoc filter operator/);
+        });
+
+        it('forwards ad hoc filters through interpolateVariablesInQueries', () => {
+            const ds = makeDataSource({}, passthroughTemplateSrv);
+            const queries: Query[] = [
+                { refId: 'A', projectId: 'p1', queryText: 'severity >= INFO' },
+                { refId: 'B', projectId: 'p2', queryText: '' },
+            ];
+            const result = ds.interpolateVariablesInQueries(queries, {} as ScopedVars, [
+                filter('resource.labels.cluster_name', '=', 'prod-us'),
+            ]);
+            expect(result[0].queryText).toBe('severity >= INFO\nresource.labels.cluster_name="prod-us"');
+            expect(result[1].queryText).toBe('resource.labels.cluster_name="prod-us"');
         });
     });
 });
