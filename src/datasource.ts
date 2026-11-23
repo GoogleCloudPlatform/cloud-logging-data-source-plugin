@@ -96,13 +96,14 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   }
 
   /**
-   * Synchronous view of the default project. For GCE auth this reads the
-   * cached `gceDefaultProject`, which is only populated once
-   * {@link ensureGCEDefaultProject} has resolved.
+   * Synchronous view of the default project. For GCE / Application Default
+   * Credentials auth, an explicitly configured `defaultProject` takes
+   * precedence over the auto-detected `gceDefaultProject` (which is only
+   * populated once {@link ensureGCEDefaultProject} has resolved).
    */
   private defaultProjectSync(): string {
     const { authenticationType, defaultProject, gceDefaultProject } = this.instanceSettings.jsonData;
-    return (authenticationType === 'gce' ? gceDefaultProject : defaultProject) || '';
+    return (authenticationType === 'gce' ? defaultProject || gceDefaultProject : defaultProject) || '';
   }
 
   async getGCEDefaultProject() {
@@ -110,16 +111,17 @@ export class DataSource extends DataSourceWithBackend<Query, CloudLoggingOptions
   }
 
   /**
-   * Resolve and cache the GCE default project. Single-flight: concurrent
+   * Resolve and cache the GCE / ADC default project. Single-flight: concurrent
    * queries share one resource call, and a failed lookup is not retried
    * until the next page load — retrying per query would gate every query
-   * on a full failing round-trip.
+   * on a full failing round-trip. Skipped when `defaultProject` is already
+   * configured explicitly (for example, when using local `gcloud` ADC).
    */
   private gceDefaultProjectPromise: Promise<void> | null = null;
 
   async ensureGCEDefaultProject() {
-    const { authenticationType, gceDefaultProject } = this.instanceSettings.jsonData;
-    if (authenticationType !== 'gce' || gceDefaultProject) {
+    const { authenticationType, defaultProject, gceDefaultProject } = this.instanceSettings.jsonData;
+    if (authenticationType !== 'gce' || defaultProject || gceDefaultProject) {
       return;
     }
     if (!this.gceDefaultProjectPromise) {

@@ -41,6 +41,8 @@ If you want to access logs in multiple cloud projects, you need to ensure the se
 
 If you host Grafana on a GCE VM, you can also use the [Compute Engine service account](https://cloud.google.com/compute/docs/access/service-accounts#serviceaccount). You need to make sure the service account has sufficient permissions to access the scopes and logs in all projects.
 
+For local development or any environment configured with [Application Default Credentials (ADC)](https://cloud.google.com/docs/authentication/application-default-credentials) (for example after running `gcloud auth application-default login` or setting `GOOGLE_APPLICATION_CREDENTIALS`), select **GCE Default Service Account / ADC** (`authenticationType: gce`) and optionally set **Default Project ID** (`defaultProject`) to target a specific project without querying the GCE metadata server.
+
 Similar to [Prometheus data sources on Google Cloud](https://cloud.google.com/stackdriver/docs/managed-prometheus/query#use-serverless), you can also configure a scheduled job to use an OAuth2 access token to view the logs. Please follow the steps in the [data source syncer README](https://github.com/GoogleCloudPlatform/cloud-logging-data-source-plugin/blob/main/datasource-syncer/README.md) to configure it.
 
 ### Service account impersonation

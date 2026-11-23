@@ -37,7 +37,7 @@ describe('Google Cloud Logging Data Source', () => {
             const ds = makeDataSource();
             ds.getDefaultProject().then(r => expect(r).toBe(''));
         });
-        it('returns defaultProject from jsonData', () => {
+        it('returns defaultProject from jsonData', async () => {
             const projectId = `my-gcp-project-${random(100)}`;
             const ds = new DataSource({
                 id: random(100),
@@ -52,7 +52,24 @@ describe('Google Cloud Logging Data Source', () => {
                 name: 'something',
                 readOnly: true,
             });
-            ds.getDefaultProject().then(r => expect(r).toBe(projectId));
+            await expect(ds.getDefaultProject()).resolves.toBe(projectId);
+        });
+        it('uses explicit defaultProject under GCE/ADC auth without querying GCE metadata', async () => {
+            const ds = makeDataSource({
+                authenticationType: GoogleAuthType.GCE,
+                defaultProject: 'local-adc-project',
+            });
+            const gceSpy = jest.spyOn(ds, 'getGCEDefaultProject').mockResolvedValue('gce-meta-project');
+            await expect(ds.getDefaultProject()).resolves.toBe('local-adc-project');
+            expect(gceSpy).not.toHaveBeenCalled();
+        });
+        it('falls back to gceDefaultProject under GCE/ADC auth when defaultProject is unset', async () => {
+            const ds = makeDataSource({
+                authenticationType: GoogleAuthType.GCE,
+            });
+            const gceSpy = jest.spyOn(ds, 'getGCEDefaultProject').mockResolvedValue('gce-meta-project');
+            await expect(ds.getDefaultProject()).resolves.toBe('gce-meta-project');
+            expect(gceSpy).toHaveBeenCalledTimes(1);
         });
     });
 
@@ -489,6 +506,15 @@ describe('Google Cloud Logging Data Source', () => {
             );
             const query = { refId: 'A', query: '"abc123"' } as Query;
             expect(ds.applyTemplateVariables(query, {} as ScopedVars).projectId).toBe('gce-proj');
+        });
+
+        it('prefers explicit defaultProject over gceDefaultProject for span-link queries under GCE/ADC auth', () => {
+            const ds = makeDataSource(
+                { authenticationType: GoogleAuthType.GCE, defaultProject: 'explicit-adc-proj', gceDefaultProject: 'gce-proj' },
+                passthroughTemplateSrv
+            );
+            const query = { refId: 'A', query: '"abc123"' } as Query;
+            expect(ds.applyTemplateVariables(query, {} as ScopedVars).projectId).toBe('explicit-adc-proj');
         });
 
         it('leaves projectId empty for non-span-link queries so misconfiguration fails loudly', () => {
